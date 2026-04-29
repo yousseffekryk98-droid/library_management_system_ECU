@@ -17,6 +17,7 @@ import {
   Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import Dashboard from './components/Dashboard';
 import BookManager from './components/BookManager';
 import BorrowManager from './components/BorrowManager';
 import SettingsManager from './components/SettingsManager';
@@ -24,8 +25,13 @@ import StudentManager from './components/StudentManager';
 
 export default function App() {
   const [lang, setLang] = useState<Language>('ar');
-  const [activeTab, setActiveTab] = useState<'inventory' | 'borrowing' | 'students' | 'settings'>('inventory');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'borrowing' | 'students' | 'settings'>('dashboard');
   const [currentDr, setCurrentDr] = useState('Loading...');
+  const [isLocked, setIsLocked] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState(false);
+  
+  const CORRECT_PIN = "0000"; // Default PIN as requested
   
   const t = translations[lang];
   const isRtl = lang === 'ar';
@@ -33,6 +39,19 @@ export default function App() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === CORRECT_PIN) {
+      setIsLocked(false);
+      setPinInput('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinInput('');
+      setTimeout(() => setPinError(false), 2000);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -45,7 +64,8 @@ export default function App() {
   };
 
   const menuItems = [
-    { id: 'inventory', label: t.tabs.inventory, icon: LayoutDashboard },
+    { id: 'dashboard', label: t.tabs.dashboard, icon: LayoutDashboard },
+    { id: 'inventory', label: t.tabs.inventory, icon: Library },
     { id: 'borrowing', label: t.tabs.borrowing, icon: BookMarked },
     { id: 'students', label: t.tabs.students, icon: Users },
     { id: 'settings', label: t.tabs.settings, icon: Settings },
@@ -118,8 +138,12 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4">
-             <button className="text-slate-500 border border-slate-300 p-2 rounded hover:bg-slate-50 transition-colors">
+             <button 
+               onClick={() => setIsLocked(true)}
+               className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-300 p-2 rounded hover:bg-slate-900 hover:text-white transition-all shadow-sm font-bold text-[10px] uppercase"
+             >
                <Settings className="w-4 h-4" />
+               Lock System
              </button>
              <button className="flex items-center gap-2 text-slate-600 hover:text-red-600 text-xs font-bold uppercase transition-colors">
                <LogOut className="w-4 h-4" />
@@ -127,6 +151,49 @@ export default function App() {
              </button>
           </div>
         </header>
+
+        {/* Locked Screen Overlay */}
+        <AnimatePresence>
+          {isLocked && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4 backdrop-blur-xl"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="bg-white/10 p-12 rounded-[40px] border border-white/20 text-center max-w-sm w-full"
+              >
+                <div className="w-20 h-20 bg-blue-500 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-blue-500/20">
+                  <Library className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-white text-2xl font-bold mb-2">SYSTEM LOCKED</h2>
+                <p className="text-slate-400 text-sm mb-8 italic">Please enter your 4-digit PIN to access the Library Master Pro</p>
+                
+                <form onSubmit={handleUnlock} className="space-y-4">
+                  <input 
+                    type="password" 
+                    maxLength={4}
+                    autoFocus
+                    placeholder="****"
+                    className={`w-full bg-white/5 border ${pinError ? 'border-red-500' : 'border-white/20'} rounded-2xl py-4 text-center text-3xl font-bold text-white outline-none focus:border-blue-500 transition-all`}
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                  />
+                  {pinError && <p className="text-red-500 text-xs font-bold uppercase animate-pulse">Incorrect Access Key</p>}
+                  <button 
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-500/20"
+                  >
+                    Unlock Session
+                  </button>
+                </form>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Dynamic Page Container */}
         <div className="flex-1 overflow-y-auto p-8 bg-[#f0f2f5]">
@@ -150,6 +217,7 @@ export default function App() {
                 exit={{ opacity: 0, x: isRtl ? 10 : -10 }}
                 transition={{ duration: 0.25, ease: "easeOut" }}
               >
+                {activeTab === 'dashboard' && <Dashboard lang={lang} onAction={(tab) => setActiveTab(tab)} />}
                 {activeTab === 'inventory' && <BookManager lang={lang} />}
                 {activeTab === 'borrowing' && <BorrowManager lang={lang} />}
                 {activeTab === 'students' && <StudentManager lang={lang} />}

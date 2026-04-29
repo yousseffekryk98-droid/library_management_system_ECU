@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
 import { Search, Plus, Edit, Trash2, X, Save, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { format } from 'date-fns';
 
 interface Book {
   id: number;
@@ -11,6 +12,8 @@ interface Book {
   classification_number: string;
   edition_number: string;
   isbn: string;
+  category: string;
+  condition: string;
   quantity: number;
   sector: string;
   shelf_number: string;
@@ -267,7 +270,7 @@ export default function BookManager({ lang }: { lang: Language }) {
                  <div className="flex items-center gap-3">
                    <History className="w-5 h-5 text-blue-400" />
                    <div>
-                     <h3 className="font-bold">Book Circulation History</h3>
+                     <h3 className="font-bold">{books.find(b => b.id === selectedBookHistory[0]?.book_id)?.title || 'Book'} History</h3>
                      <p className="text-xs text-slate-400">Past and current borrowers</p>
                    </div>
                  </div>
@@ -373,6 +376,33 @@ export default function BookManager({ lang }: { lang: Language }) {
                       value={editingBook?.isbn || ''}
                       onChange={(e) => setEditingBook({ ...editingBook, isbn: e.target.value })}
                     />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t.inventory.category}</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={editingBook?.category || 'General'}
+                      onChange={(e) => setEditingBook({ ...editingBook, category: e.target.value })}
+                    >
+                      <option value="General">General</option>
+                      <option value="Science">Science</option>
+                      <option value="Literature">Literature</option>
+                      <option value="History">History</option>
+                      <option value="Technology">Technology</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t.inventory.condition}</label>
+                    <select
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      value={editingBook?.condition || 'New'}
+                      onChange={(e) => setEditingBook({ ...editingBook, condition: e.target.value })}
+                    >
+                      <option value="New">New</option>
+                      <option value="Good">Good</option>
+                      <option value="Damaged">Damaged</option>
+                      <option value="Lost">Lost</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">{t.inventory.sector}</label>

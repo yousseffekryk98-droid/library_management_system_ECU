@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
-import { Search, User, BookOpen, ChevronRight, History, Calendar, CheckCircle } from 'lucide-react';
+import { Search, User, BookOpen, ChevronRight, History, Calendar, CheckCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 
@@ -41,6 +41,11 @@ export default function StudentManager({ lang }: { lang: Language }) {
     setStudents(data);
   };
 
+  const resetSelection = () => {
+    setSelectedStudent(null);
+    setStudentHistory([]);
+  };
+
   const viewHistory = async (studentId: string) => {
     const res = await fetch(`/api/students/${studentId}/history`);
     const history = await res.json();
@@ -71,15 +76,33 @@ export default function StudentManager({ lang }: { lang: Language }) {
           <h2 className="text-2xl font-bold text-slate-800">{t.students.title}</h2>
           <p className="text-sm text-slate-500">Track and manage student borrowing behavior</p>
         </div>
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none"
-            placeholder={t.students.searchPlaceholder}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="relative w-full md:w-80 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+              placeholder={t.students.searchPlaceholder}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button 
+                onClick={() => setSearch('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          {search && (
+            <button 
+              onClick={() => setSearch('')}
+              className="text-xs font-bold text-blue-600 hover:underline uppercase whitespace-nowrap"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
@@ -130,7 +153,7 @@ export default function StudentManager({ lang }: { lang: Language }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-              onClick={() => setSelectedStudent(null)}
+              onClick={resetSelection}
             />
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
@@ -148,9 +171,15 @@ export default function StudentManager({ lang }: { lang: Language }) {
                     <p className="text-xs text-slate-400 font-mono">Detailed History for {selectedStudent}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedStudent(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                  <ChevronRight className="w-5 h-5 rotate-90 md:rotate-0" />
-                </button>
+                <div className="flex items-center gap-2">
+                   <button 
+                     onClick={resetSelection} 
+                     className="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-all text-xs font-bold uppercase"
+                   >
+                     <X className="w-4 h-4" />
+                     {lang === 'ar' ? 'إغلاق' : 'Close'}
+                   </button>
+                </div>
               </div>
               
               <div className="flex-1 overflow-y-auto p-6 space-y-4">

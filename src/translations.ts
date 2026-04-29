@@ -2,10 +2,21 @@ export const translations = {
   en: {
     title: "Library Master Pro",
     tabs: {
+      dashboard: "Dashboard",
       inventory: "Inventory & Books",
       borrowing: "Borrowing System",
       students: "Student Management",
       settings: "Settings & Reports"
+    },
+    dashboard: {
+      totalBooks: "Total Books",
+      activeBorrowing: "Active Borrows",
+      overdue: "Overdue Books",
+      activeStudents: "Active Students",
+      quickCheckout: "Quick Checkout",
+      quickReturn: "Quick Return",
+      welcome: "Welcome back, Doctor",
+      systemHealth: "System Summary"
     },
     students: {
       title: "Student Database",
@@ -27,6 +38,8 @@ export const translations = {
       classification: "Classification #",
       edition: "Edition #",
       isbn: "ISBN",
+      category: "Category",
+      condition: "Condition",
       quantity: "Total Copies",
       available_copies: "Available",
       sector: "Sector / Department",
@@ -76,10 +89,21 @@ export const translations = {
   ar: {
     title: "لايبراري ماستر برو",
     tabs: {
+      dashboard: "لوحة التحكم",
       inventory: "الجرد وإدارة الكتب",
       borrowing: "نظام الإعارة",
       students: "إدارة الطلاب",
       settings: "الإعدادات والتقارير"
+    },
+    dashboard: {
+      totalBooks: "إجمالي الكتب",
+      activeBorrowing: "إعارات نشطة",
+      overdue: "كتب متأخرة",
+      activeStudents: "طلاب مستعيرون",
+      quickCheckout: "إعارة سريعة",
+      quickReturn: "إرجاع سريع",
+      welcome: "مرحباً بك يا دكتور",
+      systemHealth: "ملخص حالة النظام"
     },
     students: {
       title: "قاعدة بيانات الطلاب",
@@ -101,6 +125,8 @@ export const translations = {
       classification: "رقم التصنيف",
       edition: "رقم الطبعة",
       isbn: "الرقم المعياري (ISBN)",
+      category: "الفئة",
+      condition: "حالة الكتاب",
       quantity: "إجمالي النسخ",
       available_copies: "المتاح حالياً",
       sector: "القسم / القطاع",

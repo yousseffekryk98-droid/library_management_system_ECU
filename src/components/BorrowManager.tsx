@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
-import { BookOpen, User, Calendar, History, CheckCircle, PlusCircle } from 'lucide-react';
+import { BookOpen, User, Calendar, History, CheckCircle, PlusCircle, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface Book {
@@ -212,10 +212,18 @@ export default function BorrowManager({ lang }: { lang: Language }) {
                <input 
                  type="text"
                  placeholder="Search Student ID/Name..."
-                 className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-500"
+                 className="w-full pl-9 pr-10 py-2 text-sm border border-slate-200 rounded outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium"
                  value={searchStudent}
                  onChange={(e) => setSearchStudent(e.target.value)}
                />
+               {searchStudent && (
+                 <button 
+                   onClick={() => setSearchStudent('')}
+                   className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-slate-100 rounded-full text-slate-400"
+                 >
+                   <X className="w-3.5 h-3.5" />
+                 </button>
+               )}
             </div>
           </div>
 
@@ -225,10 +233,18 @@ export default function BorrowManager({ lang }: { lang: Language }) {
                 <User className="w-3 h-3" />
                 STUDENT PROFILE: {searchStudent}
               </div>
-              <div className="text-[10px] space-x-3 rtl:space-x-reverse font-bold uppercase text-slate-500">
-                <span>Total: {filteredHistory.length}</span>
-                <span className="text-red-500">Active: {filteredHistory.filter(r => !r.return_date).length}</span>
-                <span className="text-green-600">Returned: {filteredHistory.filter(r => r.return_date).length}</span>
+              <div className="flex items-center gap-4">
+                <div className="text-[10px] space-x-3 rtl:space-x-reverse font-bold uppercase text-slate-500">
+                  <span>Total: {filteredHistory.length}</span>
+                  <span className="text-red-500">Active: {filteredHistory.filter(r => !r.return_date).length}</span>
+                  <span className="text-green-600">Returned: {filteredHistory.filter(r => r.return_date).length}</span>
+                </div>
+                <button 
+                  onClick={() => setSearchStudent('')}
+                  className="text-[10px] bg-white border border-blue-200 text-blue-600 px-2 py-0.5 rounded font-bold hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                >
+                  CLEAR
+                </button>
               </div>
             </div>
           )}
@@ -236,14 +252,19 @@ export default function BorrowManager({ lang }: { lang: Language }) {
           <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
             {filteredHistory.map((record) => {
               const timeLeft = getTimeLeft(record.expected_return_date);
+              const isOverdue = !record.return_date && timeLeft < 0;
               return (
-                <div key={record.id} className="p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div 
+                  key={record.id} 
+                  className={`p-6 hover:bg-gray-50 transition-colors flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isOverdue ? 'bg-red-50/50 border-l-4 border-red-500 shadow-inner' : ''}`}
+                >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-gray-900">{record.book_title}</span>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${record.return_date ? 'bg-green-100 text-green-700' : timeLeft < 0 ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-blue-100 text-blue-700'}`}>
-                        {record.return_date ? t.inventory.available : timeLeft < 0 ? t.borrowing.notReturned : `${timeLeft} ${t.borrowing.timer}`}
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${record.return_date ? 'bg-green-100 text-green-700' : isOverdue ? 'bg-red-600 text-white animate-pulse' : 'bg-blue-100 text-blue-700'}`}>
+                        {record.return_date ? t.inventory.available : isOverdue ? t.borrowing.notReturned : `${timeLeft} ${t.borrowing.timer}`}
                       </span>
+                      {isOverdue && <span className="text-[10px] font-bold text-red-500 uppercase tracking-tighter">Warning: High Priority</span>}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500">
                       <div className="flex items-center gap-1 font-bold text-slate-700">

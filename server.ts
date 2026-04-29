@@ -19,6 +19,8 @@ async function startServer() {
       classification_number TEXT,
       edition_number TEXT,
       isbn TEXT UNIQUE,
+      category TEXT DEFAULT 'General',
+      condition TEXT DEFAULT 'New',
       quantity INTEGER DEFAULT 1,
       sector TEXT,
       shelf_number TEXT,
@@ -51,6 +53,25 @@ async function startServer() {
   app.use(express.json());
 
   // --- API ROUTES ---
+
+  // Dashboard Stats
+  app.get("/api/stats", (req, res) => {
+    try {
+      const totalBooks = db.prepare("SELECT COUNT(*) as count FROM books").get() as any;
+      const activeBorrowing = db.prepare("SELECT COUNT(*) as count FROM borrowing WHERE return_date IS NULL").get() as any;
+      const overdue = db.prepare("SELECT COUNT(*) as count FROM borrowing WHERE return_date IS NULL AND expected_return_date < strftime('%Y-%m-%dT%H:%M:%fZ', 'now')").get() as any;
+      const activeStudents = db.prepare("SELECT COUNT(DISTINCT student_id) as count FROM borrowing WHERE return_date IS NULL").get() as any;
+      
+      res.json({
+        totalBooks: totalBooks.count,
+        activeBorrowing: activeBorrowing.count,
+        overdue: overdue.count,
+        activeStudents: activeStudents.count
+      });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
 
   // Settings
   app.get("/api/settings", (req, res) => {
