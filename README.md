@@ -1,12 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+Desktop Application (Python/PyQt6)
+As you specifically requested a Python desktop version, I have also provided the full source code and compilation instructions in a separate file within this project.
+Requirements: Located in requirements.txt.
+Python Code: Located in DESKTOP_PYTHON_CODE.md.
+Compile Command:
+code
+Bash
+pyinstaller --noconsole --onefile --name "LibraryMasterPro" main.py
+🛠️ How to use the Web Preview:
+Use the Sidebar to navigate between Inventory, Borrowing, Users, and Settings.
+Switch languages using the Globe icon or the button in the Settings tab.
+Access the database using the default admin credentials: username: admin, password: admin123.
+The system is now ready for use and testing in the live preview. 
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/50a3377c-a960-4258-bd02-e2566122e672
 
 ## Run Locally
 
