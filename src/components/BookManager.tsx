@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import { supabase } from '../services/supabase-client';
 import { Search, Plus, Edit, Trash2, X, Save, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -35,25 +36,21 @@ export default function BookManager({ lang }: { lang: Language }) {
   }, []);
 
   const viewBookHistory = async (bookId: number) => {
-    const res = await fetch('/api/borrowing');
-    const all = await res.json();
-    setSelectedBookHistory(all.filter((r: any) => r.book_id === bookId));
+    const { data, error } = await supabase.from('borrowing').select('*').eq('book_id', bookId).order('borrow_date', { ascending: false });
+    if (error) {
+      console.error('Failed to load history', error);
+      setSelectedBookHistory([]);
+      return;
+    }
+    setSelectedBookHistory(data || []);
   };
 
   const handleSqlImport = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/import-sql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql: sqlInput })
-    });
-    if (res.ok) {
-      setIsSqlModalOpen(false);
-      setSqlInput('');
-      fetchBooks();
-    } else {
-      alert("SQL Error: " + (await res.json()).error);
-    }
+    // Raw SQL import is not available via the client. Advise using migrations or Supabase SQL editor.
+    alert('SQL import is disabled in the client. Please run migration SQL on the Supabase project or use the SQL editor.');
+    setIsSqlModalOpen(false);
+    setSqlInput('');
   };
 
   const safeFormatDate = (dateStr: string | null | undefined, fmt: string = 'yyyy-MM-dd') => {
@@ -68,32 +65,32 @@ export default function BookManager({ lang }: { lang: Language }) {
   };
 
   const fetchBooks = async () => {
-    const res = await fetch('/api/books');
-    const data = await res.json();
-    setBooks(data);
+    const { data, error } = await supabase.from('books').select('*').order('title', { ascending: true });
+    if (error) {
+      console.error('Failed to fetch books', error);
+      return;
+    }
+    setBooks(data || []);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const method = editingBook?.id ? 'PUT' : 'POST';
-    const url = editingBook?.id ? `/api/books/${editingBook.id}` : '/api/books';
-    
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editingBook)
-    });
-
-    if (res.ok) {
-      setIsModalOpen(false);
-      setEditingBook(null);
-      fetchBooks();
+    if (editingBook?.id) {
+      const { error } = await supabase.from('books').update(editingBook).eq('id', editingBook.id);
+      if (error) return alert('Update failed: ' + error.message);
+    } else {
+      const { error } = await supabase.from('books').insert(editingBook as any);
+      if (error) return alert('Insert failed: ' + error.message);
     }
+    setIsModalOpen(false);
+    setEditingBook(null);
+    fetchBooks();
   };
 
   const handleDelete = async (id: number) => {
     if (confirm(t.common.deleteConfirm)) {
-      await fetch(`/api/books/${id}`, { method: 'DELETE' });
+      const { error } = await supabase.from('books').delete().eq('id', id);
+      if (error) return alert('Delete failed: ' + error.message);
       fetchBooks();
     }
   };

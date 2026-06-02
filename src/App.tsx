@@ -10,7 +10,6 @@ import {
   BookMarked, 
   Users, 
   Settings, 
-  ChevronRight, 
   LogOut,
   Globe,
   LayoutDashboard,
@@ -22,23 +21,51 @@ import BookManager from './components/BookManager';
 import BorrowManager from './components/BorrowManager';
 import SettingsManager from './components/SettingsManager';
 import StudentManager from './components/StudentManager';
+import LoginForm from './components/LoginForm';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { supabase } from './services/supabase-client';
 
-export default function App() {
-  const [lang, setLang] = useState<Language>('ar');
+// Main App with Auth
+function AuthenticatedApp() {
+  const { session, signOut, loading } = useAuth();
+  const [lang, setLang] = useState<Language>(() => {
+    try {
+      const stored = localStorage.getItem('lang');
+      if (stored === 'en' || stored === 'ar') return stored as Language;
+    } catch (e) {
+      // ignore (e.g., SSR or privacy settings)
+    }
+    return 'ar';
+  });
+
+  const setLangAndStore = (l: Language) => {
+    try {
+      localStorage.setItem('lang', l);
+    } catch (e) {
+      // ignore storage errors
+    }
+    setLang(l);
+  };
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'borrowing' | 'students' | 'settings'>('dashboard');
   const [currentDr, setCurrentDr] = useState('Loading...');
   const [isLocked, setIsLocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   
-  const CORRECT_PIN = "0000"; // Default PIN as requested
+  const CORRECT_PIN = "0000";
   
   const t = translations[lang];
   const isRtl = lang === 'ar';
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    if (session) {
+      fetchSettings();
+    }
+  }, [session]);
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +82,13 @@ export default function App() {
 
   const fetchSettings = async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.current_dr) setCurrentDr(data.current_dr);
+      const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'current_dr')
+        .single();
+      if (error) throw error;
+      if (data?.value) setCurrentDr(data.value);
     } catch (err) {
       console.error("Failed to fetch settings", err);
     }
@@ -70,6 +101,21 @@ export default function App() {
     { id: 'students', label: t.tabs.students, icon: Users },
     { id: 'settings', label: t.tabs.settings, icon: Settings },
   ] as const;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-sm">Loading secure session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginForm onLoginSuccess={() => {}} lang={lang} />;
+  }
 
   return (
     <div 
@@ -107,19 +153,28 @@ export default function App() {
         <div className="p-6 border-t border-slate-700 bg-[#0f172a]/50">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-slate-500 border-2 border-blue-400 shrink-0 overflow-hidden">
-               <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600"></div>
+               <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold">
+                 {session.user?.email?.charAt(0).toUpperCase() || 'A'}
+               </div>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold truncate">{currentDr}</p>
-              <p className="text-[10px] text-slate-400 truncate uppercase tracking-tighter">Chief Librarian</p>
+              <p className="text-[10px] text-slate-400 truncate uppercase tracking-tighter">Administrator</p>
             </div>
           </div>
           <button 
-            onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
-            className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs font-bold transition-colors"
+            onClick={() => setLangAndStore(lang === 'ar' ? 'en' : 'ar')}
+            className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs font-bold transition-colors mb-2"
           >
             <Globe className="w-3 h-3" />
             <span>{lang === 'ar' ? 'EN / الانجليزية' : 'AR / العربية'}</span>
+          </button>
+          <button 
+            onClick={handleSignOut}
+            className="w-full flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded text-xs font-bold transition-colors"
+          >
+            <LogOut className="w-3 h-3" />
+            <span>{lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}</span>
           </button>
         </div>
       </aside>
@@ -144,10 +199,6 @@ export default function App() {
              >
                <Settings className="w-4 h-4" />
                Lock System
-             </button>
-             <button className="flex items-center gap-2 text-slate-600 hover:text-red-600 text-xs font-bold uppercase transition-colors">
-               <LogOut className="w-4 h-4" />
-               {lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}
              </button>
           </div>
         </header>
@@ -221,12 +272,21 @@ export default function App() {
                 {activeTab === 'inventory' && <BookManager lang={lang} />}
                 {activeTab === 'borrowing' && <BorrowManager lang={lang} />}
                 {activeTab === 'students' && <StudentManager lang={lang} />}
-                {activeTab === 'settings' && <SettingsManager lang={lang} setLang={setLang} onSettingsUpdate={fetchSettings} />}
+                {activeTab === 'settings' && <SettingsManager lang={lang} setLang={setLangAndStore} onSettingsUpdate={fetchSettings} />}
               </motion.div>
             </AnimatePresence>
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+// Root App Component with Auth Provider
+export default function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   );
 }

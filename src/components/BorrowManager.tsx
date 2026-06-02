@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
 import { BookOpen, User, Calendar, History, CheckCircle, PlusCircle, X } from 'lucide-react';
+import { supabase } from '../services/supabase-client';
 import { format } from 'date-fns';
 
 interface Book {
@@ -44,40 +45,73 @@ export default function BorrowManager({ lang }: { lang: Language }) {
   }, []);
 
   const fetchData = async () => {
-    const [borrowRes, booksRes] = await Promise.all([
-      fetch('/api/borrowing'),
-      fetch('/api/books')
+    const [{ data: borrowData, error: borrowError }, { data: booksData, error: booksError }] = await Promise.all([
+      supabase.from('borrowing').select('*').order('borrow_date', { ascending: false }),
+      supabase.from('books').select('*').order('title', { ascending: true })
     ]);
-    const borrowData = await borrowRes.json();
-    const booksData = await booksRes.json();
-    setBorrowing(borrowData);
-    setAvailableBooks(booksData.filter((b: Book) => (b.quantity || 1) - (b.current_borrows || 0) > 0));
+    if (borrowError) console.error('Failed loading borrowing', borrowError);
+    if (booksError) console.error('Failed loading books', booksError);
+    setBorrowing(borrowData || []);
+    setAvailableBooks((booksData || []).filter((b: Book) => (b.quantity || 1) - (b.current_borrows || 0) > 0));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/borrowing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData)
-    });
-    if (res.ok) {
-      setFormData({
-        book_id: '',
-        student_name: '',
-        student_id: '',
-        college_name: '',
-        faculty_name: '',
-        academic_year: '',
-        duration_days: '7'
+    const borrowPayload = {
+      book_id: parseInt(formData.book_id as any, 10),
+      student_name: formData.student_name,
+      student_id: formData.student_id,
+      college_name: formData.college_name,
+      faculty_name: formData.faculty_name,
+      academic_year: formData.academic_year,
+      borrow_date: new Date().toISOString(),
+      expected_return_date: new Date(Date.now() + parseInt(formData.duration_days, 10) * 24 * 3600 * 1000).toISOString(),
+      return_date: null
+    };
+
+    // Ensure the student exists / is updated in the students table
+    try {
+      const { error: studentErr } = await supabase.from('students').upsert({
+        student_id: borrowPayload.student_id,
+        student_name: borrowPayload.student_name,
+        college_name: borrowPayload.college_name,
+        faculty_name: borrowPayload.faculty_name,
+        academic_year: borrowPayload.academic_year
       });
-      fetchData();
+      if (studentErr) console.warn('Failed to upsert student record:', studentErr.message);
+    } catch (e) {
+      console.warn('Students upsert exception:', e);
     }
+
+    const { error } = await supabase.from('borrowing').insert(borrowPayload);
+    if (error) return alert('Failed to register borrowing: ' + error.message);
+
+    // increment book current_borrows
+    const { error: incErr } = await supabase.rpc('increment_book_borrows', { book_id_in: borrowPayload.book_id });
+    if (incErr) console.warn('increment RPC failed (ensure migration created RPC):', incErr.message);
+
+    setFormData({
+      book_id: '',
+      student_name: '',
+      student_id: '',
+      college_name: '',
+      faculty_name: '',
+      academic_year: '',
+      duration_days: '7'
+    });
+    fetchData();
   };
 
   const handleReturn = async (id: number) => {
-    const res = await fetch(`/api/return/${id}`, { method: 'POST' });
-    if (res.ok) fetchData();
+    // set return_date to now
+    const { data, error } = await supabase.from('borrowing').update({ return_date: new Date().toISOString() }).eq('id', id).select().single();
+    if (error) return alert('Return failed: ' + error.message);
+
+    // decrement book borrows via RPC
+    const { error: decErr } = await supabase.rpc('decrement_book_borrows', { book_id_in: data.book_id });
+    if (decErr) console.warn('decrement RPC failed (ensure migration created RPC):', decErr.message);
+
+    fetchData();
   };
 
   const safeFormatDate = (dateStr: string | null | undefined) => {

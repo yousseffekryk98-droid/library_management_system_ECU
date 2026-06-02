@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import { supabase } from '../services/supabase-client';
 import { FileDown, Languages, Shield, Database, Info, UserCheck, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -12,28 +13,26 @@ export default function SettingsManager({ lang, setLang, onSettingsUpdate }: { l
   }, []);
 
   const fetchSettings = async () => {
-    const res = await fetch('/api/settings');
-    const data = await res.json();
-    if (data.current_dr) setCurrentDr(data.current_dr);
+    const { data, error } = await supabase.from('settings').select('value').eq('key', 'current_dr').single();
+    if (error) {
+      console.error('Failed to load settings', error);
+      return;
+    }
+    if (data?.value) setCurrentDr(data.value);
   };
 
   const updateDrName = async () => {
-    const res = await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'current_dr', value: currentDr })
-    });
-    if (res.ok) {
-       alert(lang === 'ar' ? 'تم تحديث اسم المسؤول بنجاح' : 'Librarian name updated successfully');
-       if (onSettingsUpdate) onSettingsUpdate();
-    }
+    const { error } = await supabase.from('settings').upsert({ key: 'current_dr', value: currentDr });
+    if (error) return alert('Update failed: ' + error.message);
+    alert(lang === 'ar' ? 'تم تحديث اسم المسؤول بنجاح' : 'Librarian name updated successfully');
+    if (onSettingsUpdate) onSettingsUpdate();
   };
 
   const exportToExcel = async (type: 'inventory' | 'borrowing') => {
-    const res = await fetch(`/api/${type === 'inventory' ? 'books' : 'borrowing'}`);
-    const data = await res.json();
-    
-    const ws = XLSX.utils.json_to_sheet(data);
+    const table = type === 'inventory' ? 'books' : 'borrowing';
+    const { data, error } = await supabase.from(table).select('*');
+    if (error) return alert('Failed to export: ' + error.message);
+    const ws = XLSX.utils.json_to_sheet(data || []);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, type === 'inventory' ? 'Inventory' : 'History');
     

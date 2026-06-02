@@ -11,6 +11,7 @@ import {
   Clock
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { supabase } from '../services/supabase-client';
 
 interface DashboardStats {
   totalBooks: number;
@@ -30,15 +31,25 @@ export default function Dashboard({
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Supabase client imported above
+
   useEffect(() => {
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/stats');
-      const data = await res.json();
-      setStats(data);
+      const { data: booksData, error: booksErr, count: booksCount } = await supabase.from('books').select('*', { count: 'exact' });
+      const { data: borrowingData, error: borrowErr, count: borrowCount } = await supabase.from('borrowing').select('*', { count: 'exact' }).is('return_date', null);
+      const { data: overdueData, error: overdueErr, count: overdueCount } = await supabase.from('borrowing').select('*', { count: 'exact' }).lt('expected_return_date', new Date().toISOString()).is('return_date', null);
+      const { data: studentsData, error: studentsErr, count: studentsCount } = await supabase.from('students').select('*', { count: 'exact' });
+
+      setStats({
+        totalBooks: (booksCount ?? (booksData || []).length) as number,
+        activeBorrowing: (borrowCount ?? (borrowingData || []).length) as number,
+        overdue: (overdueCount ?? (overdueData || []).length) as number,
+        activeStudents: (studentsCount ?? (studentsData || []).length) as number
+      });
     } catch (err) {
       console.error("Failed to fetch stats", err);
     } finally {

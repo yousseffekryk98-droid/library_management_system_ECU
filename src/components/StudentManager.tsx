@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { translations, Language } from '../translations';
+import { supabase } from '../services/supabase-client';
 import { Search, User, BookOpen, ChevronRight, History, Calendar, CheckCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -36,9 +37,12 @@ export default function StudentManager({ lang }: { lang: Language }) {
   }, []);
 
   const fetchStudents = async () => {
-    const res = await fetch('/api/students');
-    const data = await res.json();
-    setStudents(data);
+    const { data, error } = await supabase.from('students').select('*').order('student_name', { ascending: true });
+    if (error) {
+      console.error('Failed to load students', error);
+      return;
+    }
+    setStudents(data || []);
   };
 
   const resetSelection = () => {
@@ -47,9 +51,13 @@ export default function StudentManager({ lang }: { lang: Language }) {
   };
 
   const viewHistory = async (studentId: string) => {
-    const res = await fetch(`/api/students/${studentId}/history`);
-    const history = await res.json();
-    setStudentHistory(history);
+    const { data, error } = await supabase.from('borrowing').select('*').eq('student_id', studentId).order('borrow_date', { ascending: false });
+    if (error) {
+      console.error('Failed to fetch history', error);
+      setStudentHistory([]);
+    } else {
+      setStudentHistory(data || []);
+    }
     setSelectedStudent(studentId);
   };
 
