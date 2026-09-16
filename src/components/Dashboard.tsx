@@ -1,191 +1,114 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { translations, Language } from '../translations';
-import { 
-  Library, 
-  Users, 
-  AlertCircle, 
+import {
+  AlertCircle,
+  BarChart3,
   BookMarked,
-  ArrowRightCircle,
-  Undo2,
-  TrendingUp,
-  Clock
+  CalendarClock,
+  CircleDollarSign,
+  Library,
+  RefreshCw,
+  Users
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../services/supabase-client';
 
-interface DashboardStats {
-  totalBooks: number;
-  activeBorrowing: number;
-  overdue: number;
+type DashboardTab = 'inventory' | 'borrowing' | 'students' | 'operations' | 'fines' | 'reports';
+
+type DashboardStats = {
+  titles: number;
+  physicalCopies: number;
+  activeLoans: number;
+  overdueLoans: number;
+  activeReservations: number;
   activeStudents: number;
-}
+  outstandingFines: number;
+};
 
-export default function Dashboard({ 
-  lang, 
-  onAction 
-}: { 
-  lang: Language;
-  onAction: (tab: 'inventory' | 'borrowing' | 'students') => void;
-}) {
+export default function Dashboard({ lang, onAction }: { lang: Language; onAction: (tab: DashboardTab) => void }) {
   const t = translations[lang];
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({ titles: 0, physicalCopies: 0, activeLoans: 0, overdueLoans: 0, activeReservations: 0, activeStudents: 0, outstandingFines: 0 });
   const [loading, setLoading] = useState(true);
+  const [v4Ready, setV4Ready] = useState(true);
 
-  // Supabase client imported above
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const { data: booksData, error: booksErr, count: booksCount } = await supabase.from('books').select('*', { count: 'exact' });
-      const { data: borrowingData, error: borrowErr, count: borrowCount } = await supabase.from('borrowing').select('*', { count: 'exact' }).is('return_date', null);
-      const { data: overdueData, error: overdueErr, count: overdueCount } = await supabase.from('borrowing').select('*', { count: 'exact' }).lt('expected_return_date', new Date().toISOString()).is('return_date', null);
-      const { data: studentsData, error: studentsErr, count: studentsCount } = await supabase.from('students').select('*', { count: 'exact' });
-
-      setStats({
-        totalBooks: (booksCount ?? (booksData || []).length) as number,
-        activeBorrowing: (borrowCount ?? (borrowingData || []).length) as number,
-        overdue: (overdueCount ?? (overdueData || []).length) as number,
-        activeStudents: (studentsCount ?? (studentsData || []).length) as number
-      });
-    } catch (err) {
-      console.error("Failed to fetch stats", err);
-    } finally {
-      setLoading(false);
-    }
+  const labels = lang === 'ar' ? {
+    copies: 'إجمالي النسخ', reservations: 'حجوزات نشطة', fines: 'غرامات مستحقة', refresh: 'تحديث',
+    circulation: 'مركز التداول', circulationText: 'متابعة الحجوزات والمتأخرات وحركة الكتب اليومية.',
+    reports: 'التقارير والتحليلات', reportsText: 'راجع الاستخدام والأكثر استعارة وحالة المجموعة.',
+    finesAction: 'الغرامات والمدفوعات', finesText: 'سجل الغرامات والتحصيل والإعفاءات.',
+    migration: 'شغّل migrations 002 و003 لتفعيل كل مؤشرات الإصدار الرابع.', live: 'بيانات مباشرة'
+  } : {
+    copies: 'Physical copies', reservations: 'Active reservations', fines: 'Outstanding fines', refresh: 'Refresh',
+    circulation: 'Circulation Center', circulationText: 'Track reservations, overdue loans and day-to-day movement.',
+    reports: 'Reports & Analytics', reportsText: 'Review usage, popular titles and collection health.',
+    finesAction: 'Fines & Payments', finesText: 'Manage charges, collections and waivers.',
+    migration: 'Run migrations 002 and 003 to enable all v4 dashboard metrics.', live: 'Live database data'
   };
 
+  const fetchStats = async () => {
+    setLoading(true);
+    const { data: v4Data, error: v4Error } = await supabase.from('library_dashboard_stats').select('*').maybeSingle();
+    if (!v4Error && v4Data) {
+      setStats({
+        titles: Number(v4Data.titles || 0),
+        physicalCopies: Number(v4Data.physical_copies || 0),
+        activeLoans: Number(v4Data.active_loans || 0),
+        overdueLoans: Number(v4Data.overdue_loans || 0),
+        activeReservations: Number(v4Data.active_reservations || 0),
+        activeStudents: Number(v4Data.active_students || 0),
+        outstandingFines: Number(v4Data.outstanding_fines || 0)
+      });
+      setV4Ready(true);
+      setLoading(false);
+      return;
+    }
+
+    setV4Ready(false);
+    const [booksRes, loansRes, overdueRes, studentsRes] = await Promise.all([
+      supabase.from('books').select('id,quantity'),
+      supabase.from('borrowing').select('id').is('return_date', null),
+      supabase.from('borrowing').select('id').is('return_date', null).lt('expected_return_date', new Date().toISOString()),
+      supabase.from('students').select('student_id')
+    ]);
+    const books = booksRes.data || [];
+    setStats(prev => ({
+      ...prev,
+      titles: books.length,
+      physicalCopies: books.reduce((sum: number, b: any) => sum + Number(b.quantity || 0), 0),
+      activeLoans: (loansRes.data || []).length,
+      overdueLoans: (overdueRes.data || []).length,
+      activeStudents: (studentsRes.data || []).length
+    }));
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchStats(); }, []);
+
   const cards = [
-    { 
-      label: t.dashboard.totalBooks, 
-      value: stats?.totalBooks ?? 0, 
-      icon: Library, 
-      color: 'bg-blue-50 text-blue-600',
-      tab: 'inventory' as const
-    },
-    { 
-      label: t.dashboard.activeBorrowing, 
-      value: stats?.activeBorrowing ?? 0, 
-      icon: BookMarked, 
-      color: 'bg-green-50 text-green-600',
-      tab: 'borrowing' as const
-    },
-    { 
-      label: t.dashboard.overdue, 
-      value: stats?.overdue ?? 0, 
-      icon: AlertCircle, 
-      color: stats?.overdue && stats.overdue > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600',
-      tab: 'borrowing' as const
-    },
-    { 
-      label: t.dashboard.activeStudents, 
-      value: stats?.activeStudents ?? 0, 
-      icon: Users, 
-      color: 'bg-purple-50 text-purple-600',
-      tab: 'students' as const
-    },
+    { label: t.dashboard.totalBooks, value: stats.titles, icon: Library, className: 'bg-blue-50 text-blue-700', tab: 'inventory' as DashboardTab },
+    { label: labels.copies, value: stats.physicalCopies, icon: Library, className: 'bg-indigo-50 text-indigo-700', tab: 'inventory' as DashboardTab },
+    { label: t.dashboard.activeBorrowing, value: stats.activeLoans, icon: BookMarked, className: 'bg-emerald-50 text-emerald-700', tab: 'borrowing' as DashboardTab },
+    { label: t.dashboard.overdue, value: stats.overdueLoans, icon: AlertCircle, className: stats.overdueLoans ? 'bg-rose-50 text-rose-700' : 'bg-slate-50 text-slate-700', tab: 'operations' as DashboardTab },
+    { label: labels.reservations, value: stats.activeReservations, icon: CalendarClock, className: 'bg-amber-50 text-amber-700', tab: 'operations' as DashboardTab },
+    { label: t.dashboard.activeStudents, value: stats.activeStudents, icon: Users, className: 'bg-violet-50 text-violet-700', tab: 'students' as DashboardTab },
   ];
 
-  return (
-    <div className="space-y-8 pb-10">
-      <header className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800">{t.dashboard.welcome}</h1>
-          <p className="text-slate-500 mt-1">{t.dashboard.systemHealth}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1 justify-end">
-            <Clock className="w-3 h-3" />
-            Live Status
-          </p>
-        </div>
-      </header>
+  return <div className="space-y-6 pb-10">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div><h1 className="text-2xl font-black text-slate-900 sm:text-3xl">{t.dashboard.welcome}</h1><p className="mt-1 text-sm text-slate-500">{t.dashboard.systemHealth} · {labels.live}</p></div>
+      <button onClick={fetchStats} className="inline-flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>{labels.refresh}</button>
+    </header>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {cards.map((card, i) => (
-          <motion.div
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            onClick={() => onAction(card.tab)}
-            className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group"
-          >
-            <div className={`w-12 h-12 rounded-xl ${card.color} flex items-center justify-center mb-4 transition-transform group-hover:scale-110`}>
-              <card.icon className="w-6 h-6" />
-            </div>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">{card.label}</p>
-            <h2 className="text-3xl font-bold text-slate-900 mt-1">
-              {loading ? '...' : card.value.toLocaleString()}
-            </h2>
-            <div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase">
-              <TrendingUp className="w-3 h-3" />
-              View Details
-            </div>
-          </motion.div>
-        ))}
-      </div>
+    {!v4Ready && <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-800">{labels.migration}</div>}
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => onAction('borrowing')}
-          className="relative overflow-hidden bg-slate-900 text-white p-8 rounded-3xl group transition-all shadow-xl shadow-slate-200"
-        >
-          <div className="relative z-10 flex flex-col items-start gap-4">
-            <div className="p-4 bg-white/10 rounded-2xl">
-              <ArrowRightCircle className="w-8 h-8 text-blue-400" />
-            </div>
-            <div className="text-left rtl:text-right">
-              <h3 className="text-2xl font-bold">{t.dashboard.quickCheckout}</h3>
-              <p className="text-slate-400 text-sm mt-1">Process new borrowing request instantly</p>
-            </div>
-          </div>
-          <div className="absolute top-0 right-0 p-12 opacity-10 transition-transform group-hover:translate-x-4 rotate-12">
-            <BookMarked className="w-32 h-32" />
-          </div>
-        </motion.button>
-
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => onAction('borrowing')}
-          className="relative overflow-hidden bg-white border-2 border-slate-900 text-slate-900 p-8 rounded-3xl group transition-all"
-        >
-          <div className="relative z-10 flex flex-col items-start gap-4 text-left rtl:text-right">
-            <div className="p-4 bg-slate-100 rounded-2xl group-hover:bg-slate-900 group-hover:text-white transition-colors">
-              <Undo2 className="w-8 h-8" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold">{t.dashboard.quickReturn}</h3>
-              <p className="text-slate-500 text-sm mt-1">Return books back to inventory</p>
-            </div>
-          </div>
-          <div className="absolute top-0 right-0 p-12 opacity-5 transition-transform group-hover:translate-x-4">
-            <Library className="w-32 h-32" />
-          </div>
-        </motion.button>
-      </div>
-      
-      {/* Visual Accent */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-8 text-white flex flex-col md:flex-row items-center gap-8 shadow-lg shadow-blue-100">
-        <div className="flex-1">
-          <h4 className="text-xl font-bold">Pro Tip: Scanner Ready</h4>
-          <p className="text-blue-100 mt-2 opacity-80 italic">Standard USB Barcode scanners are automatically integrated. Simply focus the input field and scan a book ISBN or Student ID to begin.</p>
-        </div>
-        <div className="flex -space-x-4 rtl:space-x-reverse">
-          {[1,2,3,4].map(i => (
-            <div key={i} className="w-12 h-12 rounded-full border-4 border-white bg-blue-100 overflow-hidden">
-               <div className="w-full h-full bg-slate-400 opacity-50"></div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      {cards.map((card, i) => <motion.button key={card.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} onClick={() => onAction(card.tab)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-start shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><div className={`mb-4 grid h-11 w-11 place-items-center rounded-xl ${card.className}`}><card.icon className="h-5 w-5"/></div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{card.label}</p><p className="mt-1 text-3xl font-black text-slate-900">{loading ? '—' : card.value.toLocaleString()}</p></motion.button>)}
     </div>
-  );
+
+    <div className="grid gap-4 lg:grid-cols-3">
+      <button onClick={() => onAction('operations')} className="rounded-2xl bg-slate-950 p-6 text-start text-white shadow-sm transition hover:bg-slate-900"><CalendarClock className="mb-5 h-7 w-7 text-blue-300"/><h3 className="text-lg font-bold">{labels.circulation}</h3><p className="mt-2 text-sm leading-6 text-slate-300">{labels.circulationText}</p></button>
+      <button onClick={() => onAction('fines')} className="rounded-2xl border border-slate-200 bg-white p-6 text-start shadow-sm transition hover:border-slate-300 hover:shadow-md"><CircleDollarSign className="mb-5 h-7 w-7 text-emerald-600"/><div className="flex items-end justify-between gap-4"><div><h3 className="text-lg font-bold text-slate-900">{labels.finesAction}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{labels.finesText}</p></div>{v4Ready && <span className="whitespace-nowrap text-lg font-black text-rose-600">{stats.outstandingFines.toFixed(2)} EGP</span>}</div></button>
+      <button onClick={() => onAction('reports')} className="rounded-2xl border border-slate-200 bg-white p-6 text-start shadow-sm transition hover:border-slate-300 hover:shadow-md"><BarChart3 className="mb-5 h-7 w-7 text-blue-600"/><h3 className="text-lg font-bold text-slate-900">{labels.reports}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{labels.reportsText}</p></button>
+    </div>
+  </div>;
 }

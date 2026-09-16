@@ -1,6 +1,17 @@
 {
-  "name": "Library Master Pro",
-  "description": "A high-performance, bilingual (Arabic & English) library system. Features real-time inventory, student borrowing history databases, librarian shift management (Dr. Shift), and automated Excel reporting.",
+  "name": "ECU Library Management Pro",
+  "description": "Bilingual Arabic/English university library operations platform for catalog management, borrowing, students, reservations, overdue workflows, fines and payments, inventory audits, staff roles, reporting and Supabase-backed authentication/data.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "catalog-management",
+    "circulation",
+    "student-records",
+    "reservations",
+    "fines-and-payments",
+    "inventory-audits",
+    "reports-and-analytics",
+    "arabic-rtl",
+    "responsive-ui",
+    "supabase-auth"
+  ]
 }

@@ -1,0 +1,115 @@
+name: ECU Library CI
+
+on:
+  push:
+    branches:
+      - main
+      - upgrade/library-pro-v4
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
+
+  migration-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecu_library
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d ecu_library"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      PGPASSWORD: postgres
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: ecu_library
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create minimal Supabase Auth compatibility stubs
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              CREATE ROLE anon NOLOGIN;
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              CREATE ROLE authenticated NOLOGIN;
+            END IF;
+          END
+          $$;
+
+          CREATE SCHEMA IF NOT EXISTS auth;
+
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id UUID PRIMARY KEY,
+            email TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+
+          CREATE OR REPLACE FUNCTION auth.uid()
+          RETURNS UUID
+          LANGUAGE sql
+          STABLE
+          AS $$ SELECT NULL::UUID $$;
+          SQL
+
+      - name: Apply every migration to a clean database
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find migrations -maxdepth 1 -type f -name '*.sql' | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No migration SQL files found"
+            exit 1
+          fi
+          printf 'Migration order:\n%s\n' "${files[*]}"
+          for file in "${files[@]}"; do
+            echo "Applying $file"
+            psql -v ON_ERROR_STOP=1 -f "$file"
+          done
+
+      - name: Confirm final migration ledger
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "TABLE public.library_schema_migrations;"

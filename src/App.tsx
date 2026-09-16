@@ -3,290 +3,204 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { translations, Language } from './translations';
-import { 
-  Library, 
-  BookMarked, 
-  Users, 
-  Settings, 
-  LogOut,
+import {
+  BarChart3,
+  BellRing,
+  BookMarked,
+  Boxes,
+  Building2,
+  ClipboardList,
   Globe,
   LayoutDashboard,
-  Search
+  Library,
+  LogOut,
+  Menu,
+  ReceiptText,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  UserCog,
+  Users,
+  X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import Dashboard from './components/Dashboard';
 import BookManager from './components/BookManager';
 import BorrowManager from './components/BorrowManager';
 import SettingsManager from './components/SettingsManager';
 import StudentManager from './components/StudentManager';
+import OperationsManager from './components/OperationsManager';
+import ReportsManager from './components/ReportsManager';
+import FinesManager from './components/FinesManager';
+import AcquisitionsManager from './components/AcquisitionsManager';
+import InventoryControlManager from './components/InventoryControlManager';
+import NotificationsManager from './components/NotificationsManager';
+import StaffManager from './components/StaffManager';
+import CampusServicesManager from './components/CampusServicesManager';
+import PatronPortal from './components/PatronPortal';
 import LoginForm from './components/LoginForm';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './services/supabase-client';
 
-// Main App with Auth
+type Tab = 'dashboard' | 'inventory' | 'copies' | 'borrowing' | 'students' | 'operations' | 'fines' | 'acquisitions' | 'services' | 'notifications' | 'reports' | 'staff' | 'settings';
+
+type StaffProfile = {
+  display_name?: string | null;
+  role?: 'bootstrap' | 'admin' | 'librarian' | 'assistant' | 'viewer' | null;
+};
+
+type PatronIdentity = { student_id: string; preferred_language?: 'ar' | 'en' };
+
 function AuthenticatedApp() {
   const { session, signOut, loading } = useAuth();
   const [lang, setLang] = useState<Language>(() => {
     try {
       const stored = localStorage.getItem('lang');
-      if (stored === 'en' || stored === 'ar') return stored as Language;
-    } catch (e) {
-      // ignore (e.g., SSR or privacy settings)
+      return stored === 'en' || stored === 'ar' ? stored : 'ar';
+    } catch {
+      return 'ar';
     }
-    return 'ar';
   });
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [currentDr, setCurrentDr] = useState('Library Staff');
+  const [staff, setStaff] = useState<StaffProfile>({ role: null });
+  const [patron, setPatron] = useState<PatronIdentity | null>(null);
+  const [identityReady, setIdentityReady] = useState(false);
 
-  const setLangAndStore = (l: Language) => {
-    try {
-      localStorage.setItem('lang', l);
-    } catch (e) {
-      // ignore storage errors
-    }
-    setLang(l);
-  };
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'borrowing' | 'students' | 'settings'>('dashboard');
-  const [currentDr, setCurrentDr] = useState('Loading...');
-  const [isLocked, setIsLocked] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState(false);
-  
-  const CORRECT_PIN = "0000";
-  
   const t = translations[lang];
   const isRtl = lang === 'ar';
 
-  useEffect(() => {
-    if (session) {
-      fetchSettings();
-    }
-  }, [session]);
-
-  const handleSignOut = async () => {
-    await signOut();
+  const setLangAndStore = (value: Language) => {
+    try { localStorage.setItem('lang', value); } catch { /* storage may be unavailable */ }
+    setLang(value);
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pinInput === CORRECT_PIN) {
-      setIsLocked(false);
-      setPinInput('');
-      setPinError(false);
+  const fetchIdentity = async () => {
+    if (!session?.user) return;
+    setIdentityReady(false);
+    const [{ data: settingData }, { data: profileData }, { data: patronData }] = await Promise.all([
+      supabase.from('settings').select('value').eq('key', 'current_dr').maybeSingle(),
+      supabase.from('staff_profiles').select('display_name,role').eq('user_id', session.user.id).maybeSingle(),
+      supabase.from('patron_accounts').select('student_id,preferred_language').eq('user_id', session.user.id).maybeSingle()
+    ]);
+    if (profileData) {
+      setStaff(profileData as StaffProfile);
+      setPatron(null);
+      if (profileData.display_name) setCurrentDr(profileData.display_name);
+      else if (settingData?.value) setCurrentDr(settingData.value);
+      else setCurrentDr(session.user.email || 'Library Staff');
+    } else if (patronData) {
+      const nextPatron = patronData as PatronIdentity;
+      setPatron(nextPatron);
+      setStaff({ role: null });
+      if (nextPatron.preferred_language === 'ar' || nextPatron.preferred_language === 'en') setLangAndStore(nextPatron.preferred_language);
     } else {
-      setPinError(true);
-      setPinInput('');
-      setTimeout(() => setPinError(false), 2000);
+      const { data: roleData } = await supabase.rpc('current_library_role');
+      const bootstrapRole = roleData === 'bootstrap' ? 'bootstrap' : null;
+      setStaff({ role: bootstrapRole });
+      setPatron(null);
+      if (settingData?.value) setCurrentDr(settingData.value);
+      else setCurrentDr(session.user.email || 'Library Staff');
     }
+    setIdentityReady(true);
   };
 
-  const fetchSettings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('value')
-        .eq('key', 'current_dr')
-        .single();
-      if (error) throw error;
-      if (data?.value) setCurrentDr(data.value);
-    } catch (err) {
-      console.error("Failed to fetch settings", err);
-    }
+  useEffect(() => { if (session) fetchIdentity(); }, [session?.user?.id]);
+
+  const labels = {
+    copies: lang === 'ar' ? 'النسخ والجرد' : 'Copies & Stocktake',
+    operations: lang === 'ar' ? 'مركز التداول' : 'Circulation',
+    fines: lang === 'ar' ? 'الغرامات' : 'Fines & Payments',
+    acquisitions: lang === 'ar' ? 'المشتريات' : 'Acquisitions',
+    services: lang === 'ar' ? 'خدمات الحرم والفروع' : 'Campus Services',
+    notifications: lang === 'ar' ? 'الإشعارات' : 'Notifications',
+    reports: lang === 'ar' ? 'التقارير' : 'Reports',
+    staff: lang === 'ar' ? 'الموظفون والصلاحيات' : 'Staff & Roles',
+    secure: lang === 'ar' ? 'جلسة موثقة' : 'Authenticated session',
+    system: lang === 'ar' ? 'نظام إدارة مكتبة ECU' : 'ECU Library Management System'
   };
 
   const menuItems = [
-    { id: 'dashboard', label: t.tabs.dashboard, icon: LayoutDashboard },
-    { id: 'inventory', label: t.tabs.inventory, icon: Library },
-    { id: 'borrowing', label: t.tabs.borrowing, icon: BookMarked },
-    { id: 'students', label: t.tabs.students, icon: Users },
-    { id: 'settings', label: t.tabs.settings, icon: Settings },
-  ] as const;
+    { id: 'dashboard' as const, label: t.tabs.dashboard, icon: LayoutDashboard },
+    { id: 'inventory' as const, label: t.tabs.inventory, icon: Library },
+    { id: 'copies' as const, label: labels.copies, icon: Boxes },
+    { id: 'borrowing' as const, label: t.tabs.borrowing, icon: BookMarked },
+    { id: 'students' as const, label: t.tabs.students, icon: Users },
+    { id: 'operations' as const, label: labels.operations, icon: ClipboardList },
+    { id: 'fines' as const, label: labels.fines, icon: ReceiptText },
+    { id: 'acquisitions' as const, label: labels.acquisitions, icon: ShoppingCart },
+    { id: 'services' as const, label: labels.services, icon: Building2 },
+    { id: 'notifications' as const, label: labels.notifications, icon: BellRing },
+    { id: 'reports' as const, label: labels.reports, icon: BarChart3 },
+    { id: 'staff' as const, label: labels.staff, icon: UserCog },
+    { id: 'settings' as const, label: t.tabs.settings, icon: Settings },
+  ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-sm">Loading secure session...</p>
-        </div>
+  const selectTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setMobileNavOpen(false);
+  };
+
+  if (loading || (session && !identityReady)) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-950"><div className="text-center"><div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"/><p className="text-sm text-slate-300">Loading secure session...</p></div></div>;
+  }
+
+  if (!session) return <LoginForm onLoginSuccess={() => {}} lang={lang} />;
+
+  if (patron) return <PatronPortal lang={lang} setLang={setLangAndStore} signOut={signOut}/>;
+
+  const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
+    <aside className={`${mobile ? 'h-full w-[86vw] max-w-80' : 'hidden h-screen w-72 lg:flex'} flex-col border-e border-slate-800 bg-slate-950 text-white`}>
+      <div className="flex h-20 items-center justify-between border-b border-slate-800 px-5">
+        <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600"><Library className="h-5 w-5"/></div><div><h1 className="text-sm font-black tracking-wide">ECU LIBRARY</h1><p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Management Pro v4.3</p></div></div>
+        {mobile && <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5"/></button>}
       </div>
-    );
-  }
-
-  if (!session) {
-    return <LoginForm onLoginSuccess={() => {}} lang={lang} />;
-  }
-
-  return (
-    <div 
-      className={`h-screen w-full bg-[#f0f2f5] font-sans flex overflow-hidden border-[8px] border-[#334155]`} 
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
-      {/* Sidebar - Geometric Theme */}
-      <aside className="w-64 bg-[#1e293b] text-white flex flex-col border-r border-[#334155] shrink-0">
-        <div className="p-6 bg-[#0f172a] mb-2 border-b border-slate-700">
-          <h1 className="text-xl font-bold tracking-tight text-blue-400 uppercase italic">
-            AL-MAKTABA
-          </h1>
-          <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">
-            Library Management v3.0
-          </p>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-1 py-4">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded text-sm font-medium transition-all ${
-                activeTab === item.id 
-                  ? 'bg-blue-600 text-white' 
-                  : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              <item.icon className="w-5 h-5 shrink-0" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-6 border-t border-slate-700 bg-[#0f172a]/50">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-slate-500 border-2 border-blue-400 shrink-0 overflow-hidden">
-               <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center text-white font-bold">
-                 {session.user?.email?.charAt(0).toUpperCase() || 'A'}
-               </div>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{currentDr}</p>
-              <p className="text-[10px] text-slate-400 truncate uppercase tracking-tighter">Administrator</p>
-            </div>
-          </div>
-          <button 
-            onClick={() => setLangAndStore(lang === 'ar' ? 'en' : 'ar')}
-            className="w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs font-bold transition-colors mb-2"
-          >
-            <Globe className="w-3 h-3" />
-            <span>{lang === 'ar' ? 'EN / الانجليزية' : 'AR / العربية'}</span>
-          </button>
-          <button 
-            onClick={handleSignOut}
-            className="w-full flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-2 rounded text-xs font-bold transition-colors"
-          >
-            <LogOut className="w-3 h-3" />
-            <span>{lang === 'ar' ? 'تسجيل الخروج' : 'Logout'}</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col bg-white overflow-hidden">
-        {/* Top Header Bar */}
-        <header className="h-16 border-b border-slate-200 flex items-center justify-between px-8 bg-white shrink-0">
-          <div className="hidden md:flex items-center bg-slate-100 px-3 py-2 rounded-md w-96 border border-slate-200 focus-within:border-blue-400 focus-within:bg-white transition-all">
-            <Search className="w-4 h-4 text-slate-400 shrink-0" />
-            <input 
-              type="text" 
-              placeholder={t.inventory.searchPlaceholder}
-              className="bg-transparent border-none focus:ring-0 text-sm w-full outline-none px-2"
-            />
-          </div>
-          
-          <div className="flex items-center gap-4">
-             <button 
-               onClick={() => setIsLocked(true)}
-               className="flex items-center gap-2 bg-slate-100 text-slate-700 border border-slate-300 p-2 rounded hover:bg-slate-900 hover:text-white transition-all shadow-sm font-bold text-[10px] uppercase"
-             >
-               <Settings className="w-4 h-4" />
-               Lock System
-             </button>
-          </div>
-        </header>
-
-        {/* Locked Screen Overlay */}
-        <AnimatePresence>
-          {isLocked && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-4 backdrop-blur-xl"
-            >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                className="bg-white/10 p-12 rounded-[40px] border border-white/20 text-center max-w-sm w-full"
-              >
-                <div className="w-20 h-20 bg-blue-500 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-2xl shadow-blue-500/20">
-                  <Library className="w-10 h-10 text-white" />
-                </div>
-                <h2 className="text-white text-2xl font-bold mb-2">SYSTEM LOCKED</h2>
-                <p className="text-slate-400 text-sm mb-8 italic">Please enter your 4-digit PIN to access the Library Master Pro</p>
-                
-                <form onSubmit={handleUnlock} className="space-y-4">
-                  <input 
-                    type="password" 
-                    maxLength={4}
-                    autoFocus
-                    placeholder="****"
-                    className={`w-full bg-white/5 border ${pinError ? 'border-red-500' : 'border-white/20'} rounded-2xl py-4 text-center text-3xl font-bold text-white outline-none focus:border-blue-500 transition-all`}
-                    value={pinInput}
-                    onChange={(e) => setPinInput(e.target.value)}
-                  />
-                  {pinError && <p className="text-red-500 text-xs font-bold uppercase animate-pulse">Incorrect Access Key</p>}
-                  <button 
-                    type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-500/20"
-                  >
-                    Unlock Session
-                  </button>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Dynamic Page Container */}
-        <div className="flex-1 overflow-y-auto p-8 bg-[#f0f2f5]">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-end justify-between mb-8 border-b border-slate-200 pb-6">
-              <div>
-                <h2 className="text-3xl font-bold text-slate-800 tracking-tight">{menuItems.find(i => i.id === activeTab)?.label}</h2>
-                <p className="text-slate-500 text-sm mt-1">{t.title} Management Dashboard</p>
-              </div>
-              <div className="hidden sm:flex gap-2">
-                <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded text-xs font-bold uppercase tracking-wider">SECURE SESSION</span>
-                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase tracking-wider italic">V3.0.0</span>
-              </div>
-            </div>
-
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab + lang}
-                initial={{ opacity: 0, x: isRtl ? -10 : 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: isRtl ? 10 : -10 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-              >
-                {activeTab === 'dashboard' && <Dashboard lang={lang} onAction={(tab) => setActiveTab(tab)} />}
-                {activeTab === 'inventory' && <BookManager lang={lang} />}
-                {activeTab === 'borrowing' && <BorrowManager lang={lang} />}
-                {activeTab === 'students' && <StudentManager lang={lang} />}
-                {activeTab === 'settings' && <SettingsManager lang={lang} setLang={setLangAndStore} onSettingsUpdate={fetchSettings} />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      </main>
-    </div>
+      <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+        {menuItems.map(item => <button key={item.id} onClick={() => selectTab(item.id)} className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-950/40' : 'text-slate-300 hover:bg-slate-900 hover:text-white'}`}><item.icon className="h-5 w-5 shrink-0"/><span className="truncate">{item.label}</span></button>)}
+      </nav>
+      <div className="border-t border-slate-800 p-4">
+        <div className="mb-3 rounded-xl bg-slate-900 p-3"><div className="flex items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-800 text-sm font-black text-blue-300">{(currentDr || session.user.email || 'L').charAt(0).toUpperCase()}</div><div className="min-w-0"><p className="truncate text-xs font-bold">{currentDr}</p><p className="mt-0.5 truncate text-[10px] uppercase tracking-wide text-slate-400">{staff.role || 'unassigned'}</p></div></div></div>
+        <div className="grid grid-cols-2 gap-2"><button onClick={() => setLangAndStore(lang === 'ar' ? 'en' : 'ar')} className="flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800"><Globe className="h-4 w-4"/>{lang === 'ar' ? 'EN' : 'AR'}</button><button onClick={signOut} className="flex items-center justify-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20"><LogOut className="h-4 w-4"/>{lang === 'ar' ? 'خروج' : 'Logout'}</button></div>
+      </div>
+    </aside>
   );
+
+  return <div dir={isRtl ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-100 text-slate-900 lg:flex">
+    <Sidebar />
+    <AnimatePresence>{mobileNavOpen && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm lg:hidden" onClick={() => setMobileNavOpen(false)}><motion.div initial={{ x: isRtl ? 320 : -320 }} animate={{ x: 0 }} exit={{ x: isRtl ? 320 : -320 }} transition={{ type: 'spring', damping: 28, stiffness: 300 }} className={`absolute inset-y-0 ${isRtl ? 'right-0' : 'left-0'}`} onClick={e => e.stopPropagation()}><Sidebar mobile/></motion.div></motion.div>}</AnimatePresence>
+
+    <main className="min-w-0 flex-1">
+      <header className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/95 backdrop-blur">
+        <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3"><button onClick={() => setMobileNavOpen(true)} className="rounded-lg border border-slate-200 p-2 text-slate-600 lg:hidden"><Menu className="h-5 w-5"/></button><div className="min-w-0"><p className="truncate text-sm font-black text-slate-900">{menuItems.find(item => item.id === activeTab)?.label}</p><p className="hidden truncate text-xs text-slate-500 sm:block">{labels.system}</p></div></div>
+          <div className="flex items-center gap-2"><div className="hidden items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-700 sm:flex"><ShieldCheck className="h-4 w-4"/>{labels.secure}</div><button onClick={() => setLangAndStore(lang === 'ar' ? 'en' : 'ar')} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 lg:hidden"><Globe className="h-5 w-5"/></button></div>
+        </div>
+      </header>
+
+      <div className="p-4 sm:p-6 lg:p-8"><div className="mx-auto max-w-[1500px]">
+        <AnimatePresence mode="wait"><motion.div key={`${activeTab}-${lang}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
+          {activeTab === 'dashboard' && <Dashboard lang={lang} onAction={tab => selectTab(tab as Tab)} />}
+          {activeTab === 'inventory' && <BookManager lang={lang}/>} 
+          {activeTab === 'copies' && <InventoryControlManager lang={lang}/>} 
+          {activeTab === 'borrowing' && <BorrowManager lang={lang}/>} 
+          {activeTab === 'students' && <StudentManager lang={lang}/>} 
+          {activeTab === 'operations' && <OperationsManager lang={lang}/>} 
+          {activeTab === 'fines' && <FinesManager lang={lang}/>} 
+          {activeTab === 'acquisitions' && <AcquisitionsManager lang={lang}/>} 
+          {activeTab === 'services' && <CampusServicesManager lang={lang}/>} 
+          {activeTab === 'notifications' && <NotificationsManager lang={lang}/>} 
+          {activeTab === 'reports' && <ReportsManager lang={lang}/>} 
+          {activeTab === 'staff' && <StaffManager lang={lang}/>} 
+          {activeTab === 'settings' && <SettingsManager lang={lang} setLang={setLangAndStore} onSettingsUpdate={fetchIdentity}/>} 
+        </motion.div></AnimatePresence>
+      </div></div>
+    </main>
+  </div>;
 }
 
-// Root App Component with Auth Provider
 export default function App() {
-  return (
-    <AuthProvider>
-      <AuthenticatedApp />
-    </AuthProvider>
-  );
+  return <AuthProvider><AuthenticatedApp /></AuthProvider>;
 }

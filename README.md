@@ -1,20 +1,282 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# ECU Library Management System
 
-# Run and deploy your AI Studio app
+A bilingual Arabic/English university library operations platform built with React, TypeScript, Vite, Tailwind CSS and Supabase.
 
-This contains everything you need to run your app locally.
+## What the system covers
 
-View your app in AI Studio: https://ai.studio/apps/50a3377c-a960-4258-bd02-e2566122e672
+### Core library operations
 
-## Run Locally
+- Catalog/title management
+- Per-copy accession and barcode tracking
+- Copy condition, branch, room, sector and shelf location
+- Scanner-oriented checkout using barcode, accession number or ISBN
+- Transactional checkout of an exact physical copy
+- Copy-aware returns with condition-on-return capture
+- Automatic physical-copy status synchronization with active loans
+- Protection against the same copy being loaned twice at once
+- Student/member records and borrowing history
+- Availability tracking and overdue detection
+- Reservations / holds with waiting, ready, fulfilled, cancelled and expired states
+- Fines, partial payments, waivers and payment records
+- Lost / damaged / repair incident workflow
+- Inventory audit / stocktake sessions
+- Audit-log data model
 
-**Prerequisites:**  Node.js
+### Acquisitions
 
+- Vendor directory
+- Purchase orders and order states
+- Purchase-order line items
+- Receiving workflow
+- Automatic creation of new catalog titles when a received PO item is not yet linked to a book
+- Automatic creation of physical accession copies on receiving
+- EGP-based acquisition totals with shipping support
+- Student acquisition suggestions and review workflow
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### Campus services
+
+- Multiple library branches
+- Copy transfers between branches
+- Transfer states: requested, approved, in transit, received, cancelled
+- Study seats, desks, labs, quiet rooms, group rooms and meeting rooms
+- Capacity and approval rules
+- Student self-service space booking with overlap protection and a four-hour maximum booking window
+- Student cancellation of eligible space bookings
+- Digital resource directory for ebooks, journals, databases, theses, articles, videos and websites
+- Public/student/campus/staff access levels
+
+### Notifications
+
+- In-app, email, SMS and WhatsApp-ready notice queue
+- Arabic and English templates
+- Due-date reminders
+- Overdue notices
+- Reservation-ready notices
+- Manual notices
+- Pending / sent / failed / read states
+
+The repository manages the queue and templates. Actual outbound email/SMS/WhatsApp delivery requires a provider or server-side worker and should not expose provider secrets in the browser.
+
+### Staff and security
+
+- Supabase Auth sessions
+- Staff roles: `admin`, `librarian`, `assistant`, `viewer`
+- First-admin bootstrap flow
+- Staff role management by Auth UUID
+- Active/disabled staff profiles
+- Role-aware Row Level Security
+- Anonymous database access blocked
+- Student accounts separated from staff accounts
+- Student Auth UUID to ECU student-ID linking from the admin UI
+
+### Student self-service portal
+
+A Supabase Auth user can be linked to an ECU student ID from **Staff & Roles**. A linked student sees a separate portal rather than the staff application.
+
+The portal includes:
+
+- Searchable library catalog
+- Live physical-copy availability and location
+- Student's own active and historical loans
+- Overdue visibility
+- Self-service title reservations and cancellation
+- Student's own fines and balances
+- Student's own notices and read state
+- Account and borrowing-limit information
+- Study-space booking and cancellation
+- Digital-resource browsing
+- Book/resource purchase suggestions and request history
+- Arabic and English UI
+
+RLS ensures a linked student can only read their own private circulation, financial, booking and request data.
+
+### Reporting and UX
+
+- Live management dashboard
+- Operational statistics
+- Popular books and category distribution
+- CSV loan export
+- Arabic RTL and English LTR
+- Responsive desktop/tablet/mobile shell
+- Separate responsive student portal
+
+## Architecture
+
+Supabase is the single source of truth for authentication and library data. The Node/Express entrypoint is stateless and only hosts Vite during development or the built SPA in production. It also exposes `GET /health` for hosting checks.
+
+The old duplicated SQLite API, local `library.db`, unrestricted SQL import endpoint and client-visible lock PIN were removed.
+
+## Local setup
+
+### Requirements
+
+- Node.js 20+ (Node 22 recommended)
+- npm
+- A Supabase project
+
+### 1. Install
+
+```bash
+npm install
+```
+
+### 2. Configure environment
+
+Copy `.env.example` to `.env.local` and set:
+
+```env
+VITE_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+VITE_SUPABASE_ANON_KEY="YOUR_PUBLIC_ANON_KEY"
+PORT=3000
+```
+
+Never put a Supabase service-role key in a `VITE_` variable or commit it to GitHub.
+
+### 3. Apply database migrations to a brand-new empty Supabase database
+
+The repository now includes the **complete SQL schema from zero**. Do not manually create any application table before running the migrations.
+
+Run these files in this exact order in Supabase SQL Editor:
+
+1. `migrations/001_create_schema_and_functions.sql`
+2. `migrations/002_library_pro_v4.sql`
+3. `migrations/003_circulation_integrity_and_security.sql`
+4. `migrations/004_enterprise_library_operations.sql`
+5. `migrations/005_patron_portal_and_role_security.sql`
+6. `migrations/006_campus_library_services.sql`
+7. `migrations/007_copy_level_circulation.sql`
+8. `migrations/008_verify_complete_fresh_install.sql`
+
+What they do:
+
+- **001**: complete empty-database foundation — migration ledger, books, students, borrowing, settings, indexes, timestamps, defaults and compatibility RPCs.
+- **002**: reservations, fines/payments, notices, stocktake tables, audit log, staff profiles, richer catalog/member fields and reporting views.
+- **003**: database-level checkout validation, safe borrow-counter synchronization, fine/payment synchronization and initial RLS.
+- **004**: physical-copy/accession tracking, vendors/acquisitions, receiving, lost/damaged incidents, notification templates, patron-account mapping, reading lists and staff bootstrap helpers.
+- **005**: role-aware core RLS and student self-service functions/views.
+- **006**: multi-branch services, copy transfers, study spaces/bookings, student acquisition suggestions and digital resources.
+- **007**: atomic physical-copy checkout/return RPCs, scanner lookup, one-active-loan-per-copy enforcement and copy-status synchronization.
+- **008**: verifies the full fresh install and fails if a required table, view, RPC, index, RLS flag or baseline setting is missing.
+
+If `008` completes successfully, the schema expected by the application is present. It also records the completed chain in `public.library_schema_migrations`.
+
+See `migrations/README.md` for the database runbook.
+
+GitHub Actions additionally runs every SQL migration against a clean PostgreSQL 16 database with minimal Supabase Auth compatibility stubs, so migration syntax and dependency ordering are checked before merge.
+
+Test the complete chain on a staging Supabase project before applying it to production.
+
+### 4. Create the first administrator
+
+Create the first staff user in **Supabase Authentication** and sign into the app.
+
+If `staff_profiles` is empty, **Staff & Roles** shows the one-time **Make me admin** bootstrap control. It inserts the currently authenticated Auth user as the first library administrator.
+
+After that, administrators can create additional users in Supabase Auth and assign their UUIDs to roles from **Staff & Roles**.
+
+### 5. Create a student portal login
+
+1. Ensure the student exists in the application's `students` table.
+2. Create the student's user account in Supabase Authentication.
+3. Open **Staff & Roles**.
+4. Under **Link student portal account**, paste the Auth user UUID and ECU student ID.
+5. When that student signs in, the app automatically loads the student portal instead of the staff dashboard.
+
+Do not add a student Auth user to `staff_profiles` unless that person is genuinely authorized as library staff.
+
+### 6. Scanner / circulation setup
+
+Standard USB barcode scanners that behave like a keyboard can be used directly on the Borrowing screen. Focus the scanner field and scan one of:
+
+- physical-copy barcode
+- accession number
+- ISBN
+
+The app resolves an available physical copy and checkout is performed through a database transaction. Returns use the exact `copy_id` stored on the loan and can capture `new`, `good`, `fair`, `poor` or `damaged` condition.
+
+### 7. Run
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+## Checks and production build
+
+```bash
+npm run check
+npm run start
+```
+
+`npm run check` runs TypeScript checking and a Vite production build.
+
+GitHub Actions runs two independent checks:
+
+- `check`: `npm ci`, TypeScript checking and the production Vite build.
+- `migration-smoke`: starts an empty PostgreSQL database and executes every migration SQL file in numeric order.
+
+## Database safeguards
+
+New loans are rejected at the database layer when a student is inactive, has reached the borrowing limit, the title is archived/reference-only, or there are no available copies. Borrow counters are recalculated from actual active loans rather than blindly incremented/decremented.
+
+Copy-level circulation adds a unique partial index so one physical copy cannot have two active loans. Checkout and return RPCs lock relevant rows inside PostgreSQL, update audit records and synchronize the physical copy state with the loan lifecycle.
+
+Role-aware RLS separates staff and patrons. Students can browse the catalog and access their own member/loan/reservation/fine/notice/space-booking/acquisition-request data, but operational writes remain staff-controlled. Student mutations use restricted RPCs rather than broad table-write permission.
+
+Study-space booking validates future time, capacity, overlap and maximum booking duration in PostgreSQL, not only in the UI.
+
+The first-admin bootstrap only works while no staff profile exists. After that, staff changes require authorized staff RPCs.
+
+## Main staff screens
+
+- Dashboard
+- Inventory / Catalog
+- Copies & Stocktake
+- Borrowing / Scanner Circulation
+- Students
+- Circulation Center
+- Fines & Payments
+- Acquisitions & Vendors
+- Campus & Branch Services
+- Notification Center
+- Reports & Analytics
+- Staff & Roles
+- Settings
+
+## Student portal screens
+
+- Catalog
+- My Loans
+- Reservations
+- Services
+  - Study-space booking
+  - Digital resources
+  - Acquisition suggestions
+- Fines
+- Notices
+- Account
+
+## Deployment
+
+The frontend can be deployed to platforms that support a Vite SPA. If the Express server is used, run:
+
+```bash
+npm run build
+NODE_ENV=production npm run start
+```
+
+Configure the same Supabase public environment variables on the hosting platform.
+
+For static-only hosting, build with `npm run build` and deploy `dist`. Configure SPA fallback to `index.html`.
+
+## Production security notes
+
+- Use only the Supabase anon/public key in the frontend.
+- Never expose the service-role key in browser code.
+- Enable MFA for privileged staff where appropriate.
+- Create Auth users through trusted administrative processes; the browser app intentionally does not hold service-role credentials.
+- Outbound email/SMS/WhatsApp delivery should run server-side or through a trusted provider integration.
+- Review Supabase Auth email-confirmation, password, MFA and session policies before launch.
+- Keep migrations under version control and test restoration/backup procedures.
+- Review open dependency-security issues before production rollout.
