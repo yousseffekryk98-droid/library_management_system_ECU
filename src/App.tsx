@@ -10,6 +10,7 @@ import {
   BellRing,
   BookMarked,
   Boxes,
+  Building2,
   ClipboardList,
   Globe,
   LayoutDashboard,
@@ -37,12 +38,13 @@ import AcquisitionsManager from './components/AcquisitionsManager';
 import InventoryControlManager from './components/InventoryControlManager';
 import NotificationsManager from './components/NotificationsManager';
 import StaffManager from './components/StaffManager';
+import CampusServicesManager from './components/CampusServicesManager';
 import PatronPortal from './components/PatronPortal';
 import LoginForm from './components/LoginForm';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './services/supabase-client';
 
-type Tab = 'dashboard' | 'inventory' | 'copies' | 'borrowing' | 'students' | 'operations' | 'fines' | 'acquisitions' | 'notifications' | 'reports' | 'staff' | 'settings';
+type Tab = 'dashboard' | 'inventory' | 'copies' | 'borrowing' | 'students' | 'operations' | 'fines' | 'acquisitions' | 'services' | 'notifications' | 'reports' | 'staff' | 'settings';
 
 type StaffProfile = {
   display_name?: string | null;
@@ -113,6 +115,7 @@ function AuthenticatedApp() {
     operations: lang === 'ar' ? 'مركز التداول' : 'Circulation',
     fines: lang === 'ar' ? 'الغرامات' : 'Fines & Payments',
     acquisitions: lang === 'ar' ? 'المشتريات' : 'Acquisitions',
+    services: lang === 'ar' ? 'خدمات الحرم والفروع' : 'Campus Services',
     notifications: lang === 'ar' ? 'الإشعارات' : 'Notifications',
     reports: lang === 'ar' ? 'التقارير' : 'Reports',
     staff: lang === 'ar' ? 'الموظفون والصلاحيات' : 'Staff & Roles',
@@ -129,6 +132,7 @@ function AuthenticatedApp() {
     { id: 'operations' as const, label: labels.operations, icon: ClipboardList },
     { id: 'fines' as const, label: labels.fines, icon: ReceiptText },
     { id: 'acquisitions' as const, label: labels.acquisitions, icon: ShoppingCart },
+    { id: 'services' as const, label: labels.services, icon: Building2 },
     { id: 'notifications' as const, label: labels.notifications, icon: BellRing },
     { id: 'reports' as const, label: labels.reports, icon: BarChart3 },
     { id: 'staff' as const, label: labels.staff, icon: UserCog },
@@ -151,7 +155,7 @@ function AuthenticatedApp() {
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
     <aside className={`${mobile ? 'h-full w-[86vw] max-w-80' : 'hidden h-screen w-72 lg:flex'} flex-col border-e border-slate-800 bg-slate-950 text-white`}>
       <div className="flex h-20 items-center justify-between border-b border-slate-800 px-5">
-        <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600"><Library className="h-5 w-5"/></div><div><h1 className="text-sm font-black tracking-wide">ECU LIBRARY</h1><p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Management Pro v4.2</p></div></div>
+        <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600"><Library className="h-5 w-5"/></div><div><h1 className="text-sm font-black tracking-wide">ECU LIBRARY</h1><p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Management Pro v4.3</p></div></div>
         {mobile && <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5"/></button>}
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
@@ -186,6 +190,7 @@ function AuthenticatedApp() {
           {activeTab === 'operations' && <OperationsManager lang={lang}/>} 
           {activeTab === 'fines' && <FinesManager lang={lang}/>} 
           {activeTab === 'acquisitions' && <AcquisitionsManager lang={lang}/>} 
+          {activeTab === 'services' && <CampusServicesManager lang={lang}/>} 
           {activeTab === 'notifications' && <NotificationsManager lang={lang}/>} 
           {activeTab === 'reports' && <ReportsManager lang={lang}/>} 
           {activeTab === 'staff' && <StaffManager lang={lang}/>} 
