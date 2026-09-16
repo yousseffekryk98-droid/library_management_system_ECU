@@ -1,7 +1,7 @@
 {
-  "name": "ecu-library-management-system",
+  "name": "react-example",
   "private": true,
-  "version": "4.0.0",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
