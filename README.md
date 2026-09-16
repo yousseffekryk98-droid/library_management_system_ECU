@@ -9,8 +9,12 @@ A bilingual Arabic/English university library operations platform built with Rea
 - Catalog/title management
 - Per-copy accession and barcode tracking
 - Copy condition, branch, room, sector and shelf location
+- Scanner-oriented checkout using barcode, accession number or ISBN
+- Transactional checkout of an exact physical copy
+- Copy-aware returns with condition-on-return capture
+- Automatic physical-copy status synchronization with active loans
+- Protection against the same copy being loaned twice at once
 - Student/member records and borrowing history
-- Checkout and return workflows
 - Availability tracking and overdue detection
 - Reservations / holds with waiting, ready, fulfilled, cancelled and expired states
 - Fines, partial payments, waivers and payment records
@@ -138,6 +142,7 @@ Run these SQL files in this exact order in Supabase SQL Editor:
 4. `migrations/004_enterprise_library_operations.sql`
 5. `migrations/005_patron_portal_and_role_security.sql`
 6. `migrations/006_campus_library_services.sql`
+7. `migrations/007_copy_level_circulation.sql`
 
 What they do:
 
@@ -147,6 +152,7 @@ What they do:
 - **004**: physical-copy/accession tracking, vendors/acquisitions, receiving, lost/damaged incidents, notification templates, patron-account mapping, reading lists and staff bootstrap helpers.
 - **005**: role-aware core RLS and student self-service functions/views.
 - **006**: multi-branch services, copy transfers, study spaces/bookings, student acquisition suggestions and digital resources.
+- **007**: atomic physical-copy checkout/return RPCs, scanner lookup, one-active-loan-per-copy enforcement and copy-status synchronization.
 
 Test migrations on a staging Supabase project before applying them to production.
 
@@ -168,7 +174,17 @@ After that, administrators can create additional users in Supabase Auth and assi
 
 Do not add a student Auth user to `staff_profiles` unless that person is genuinely authorized as library staff.
 
-### 6. Run
+### 6. Scanner / circulation setup
+
+Standard USB barcode scanners that behave like a keyboard can be used directly on the Borrowing screen. Focus the scanner field and scan one of:
+
+- physical-copy barcode
+- accession number
+- ISBN
+
+The app resolves an available physical copy and checkout is performed through a database transaction. Returns use the exact `copy_id` stored on the loan and can capture `new`, `good`, `fair`, `poor` or `damaged` condition.
+
+### 7. Run
 
 ```bash
 npm run dev
@@ -191,6 +207,8 @@ GitHub Actions also runs `npm ci`, TypeScript checking and the production build 
 
 New loans are rejected at the database layer when a student is inactive, has reached the borrowing limit, the title is archived/reference-only, or there are no available copies. Borrow counters are recalculated from actual active loans rather than blindly incremented/decremented.
 
+Copy-level circulation adds a unique partial index so one physical copy cannot have two active loans. Checkout and return RPCs lock relevant rows inside PostgreSQL, update audit records and synchronize the physical copy state with the loan lifecycle.
+
 Role-aware RLS separates staff and patrons. Students can browse the catalog and access their own member/loan/reservation/fine/notice/space-booking/acquisition-request data, but operational writes remain staff-controlled. Student mutations use restricted RPCs rather than broad table-write permission.
 
 Study-space booking validates future time, capacity, overlap and maximum booking duration in PostgreSQL, not only in the UI.
@@ -202,7 +220,7 @@ The first-admin bootstrap only works while no staff profile exists. After that, 
 - Dashboard
 - Inventory / Catalog
 - Copies & Stocktake
-- Borrowing
+- Borrowing / Scanner Circulation
 - Students
 - Circulation Center
 - Fines & Payments
