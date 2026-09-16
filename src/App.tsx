@@ -14,6 +14,7 @@ import {
   Library,
   LogOut,
   Menu,
+  ReceiptText,
   Settings,
   ShieldCheck,
   Users,
@@ -27,11 +28,12 @@ import SettingsManager from './components/SettingsManager';
 import StudentManager from './components/StudentManager';
 import OperationsManager from './components/OperationsManager';
 import ReportsManager from './components/ReportsManager';
+import FinesManager from './components/FinesManager';
 import LoginForm from './components/LoginForm';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './services/supabase-client';
 
-type Tab = 'dashboard' | 'inventory' | 'borrowing' | 'students' | 'operations' | 'reports' | 'settings';
+type Tab = 'dashboard' | 'inventory' | 'borrowing' | 'students' | 'operations' | 'fines' | 'reports' | 'settings';
 
 type StaffProfile = {
   display_name?: string | null;
@@ -77,9 +79,9 @@ function AuthenticatedApp() {
 
   const labels = {
     operations: lang === 'ar' ? 'مركز التداول' : 'Circulation',
+    fines: lang === 'ar' ? 'الغرامات' : 'Fines & Payments',
     reports: lang === 'ar' ? 'التقارير' : 'Reports',
     secure: lang === 'ar' ? 'جلسة موثقة' : 'Authenticated session',
-    role: lang === 'ar' ? 'الدور' : 'Role',
     system: lang === 'ar' ? 'نظام إدارة مكتبة ECU' : 'ECU Library Management System'
   };
 
@@ -89,6 +91,7 @@ function AuthenticatedApp() {
     { id: 'borrowing' as const, label: t.tabs.borrowing, icon: BookMarked },
     { id: 'students' as const, label: t.tabs.students, icon: Users },
     { id: 'operations' as const, label: labels.operations, icon: ClipboardList },
+    { id: 'fines' as const, label: labels.fines, icon: ReceiptText },
     { id: 'reports' as const, label: labels.reports, icon: BarChart3 },
     { id: 'settings' as const, label: t.tabs.settings, icon: Settings },
   ];
@@ -107,7 +110,7 @@ function AuthenticatedApp() {
   const Sidebar = ({ mobile = false }: { mobile?: boolean }) => (
     <aside className={`${mobile ? 'h-full w-[86vw] max-w-80' : 'hidden h-screen w-72 lg:flex'} flex-col border-e border-slate-800 bg-slate-950 text-white`}>
       <div className="flex h-20 items-center justify-between border-b border-slate-800 px-5">
-        <div><div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600"><Library className="h-5 w-5"/></div><div><h1 className="text-sm font-black tracking-wide">ECU LIBRARY</h1><p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Management Pro v4</p></div></div></div>
+        <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-600"><Library className="h-5 w-5"/></div><div><h1 className="text-sm font-black tracking-wide">ECU LIBRARY</h1><p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">Management Pro v4</p></div></div>
         {mobile && <button onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-5 w-5"/></button>}
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
@@ -139,6 +142,7 @@ function AuthenticatedApp() {
           {activeTab === 'borrowing' && <BorrowManager lang={lang}/>} 
           {activeTab === 'students' && <StudentManager lang={lang}/>} 
           {activeTab === 'operations' && <OperationsManager lang={lang}/>} 
+          {activeTab === 'fines' && <FinesManager lang={lang}/>} 
           {activeTab === 'reports' && <ReportsManager lang={lang}/>} 
           {activeTab === 'settings' && <SettingsManager lang={lang} setLang={setLangAndStore} onSettingsUpdate={fetchIdentity}/>} 
         </motion.div></AnimatePresence>
