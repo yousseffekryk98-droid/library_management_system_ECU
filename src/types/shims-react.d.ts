@@ -1,6 +1,6 @@
 // Minimal React/JSX type surface for this repository.
 // Keep this typed: declaring `module 'react'` as an empty module elsewhere
-// turns hooks into `any` and breaks every generic useState/createContext call.
+// turns hooks into `any` and breaks generic hooks/context inference.
 declare module 'react' {
   export type ReactNode = any;
   export type ReactElement = any;
@@ -8,13 +8,19 @@ declare module 'react' {
   export type ChangeEvent<T = any> = any;
   export type ComponentType<P = any> = (props: P) => any;
 
+  export interface Context<T> {
+    Provider: any;
+    Consumer: any;
+    readonly __valueType?: T;
+  }
+
   export function useState<T>(initial: T | (() => T)): [T, (value: T | ((prev: T) => T)) => void];
   export function useState<T = undefined>(): [T | undefined, (value: T | undefined | ((prev: T | undefined) => T | undefined)) => void];
   export function useEffect(fn: () => void | (() => void), deps?: readonly any[]): void;
   export function useMemo<T>(factory: () => T, deps: readonly any[]): T;
   export function useCallback<T extends (...args: any[]) => any>(fn: T, deps: readonly any[]): T;
-  export function useContext<T>(ctx: any): T;
-  export function createContext<T>(value: T): any;
+  export function useContext<T>(ctx: Context<T>): T;
+  export function createContext<T>(value: T): Context<T>;
 
   export const StrictMode: any;
   export const Fragment: any;
