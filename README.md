@@ -27,6 +27,19 @@ A bilingual Arabic/English university library operations platform built with Rea
 - Automatic creation of new catalog titles when a received PO item is not yet linked to a book
 - Automatic creation of physical accession copies on receiving
 - EGP-based acquisition totals with shipping support
+- Student acquisition suggestions and review workflow
+
+### Campus services
+
+- Multiple library branches
+- Copy transfers between branches
+- Transfer states: requested, approved, in transit, received, cancelled
+- Study seats, desks, labs, quiet rooms, group rooms and meeting rooms
+- Capacity and approval rules
+- Student self-service space booking with overlap protection and a four-hour maximum booking window
+- Student cancellation of eligible space bookings
+- Digital resource directory for ebooks, journals, databases, theses, articles, videos and websites
+- Public/student/campus/staff access levels
 
 ### Notifications
 
@@ -50,6 +63,7 @@ The repository manages the queue and templates. Actual outbound email/SMS/WhatsA
 - Role-aware Row Level Security
 - Anonymous database access blocked
 - Student accounts separated from staff accounts
+- Student Auth UUID to ECU student-ID linking from the admin UI
 
 ### Student self-service portal
 
@@ -61,15 +75,16 @@ The portal includes:
 - Live physical-copy availability and location
 - Student's own active and historical loans
 - Overdue visibility
-- Self-service title reservations
-- Reservation cancellation
+- Self-service title reservations and cancellation
 - Student's own fines and balances
-- Student's own notices
-- Notice read state
+- Student's own notices and read state
 - Account and borrowing-limit information
+- Study-space booking and cancellation
+- Digital-resource browsing
+- Book/resource purchase suggestions and request history
 - Arabic and English UI
 
-RLS ensures a linked student can only read their own private circulation/financial data.
+RLS ensures a linked student can only read their own private circulation, financial, booking and request data.
 
 ### Reporting and UX
 
@@ -122,6 +137,7 @@ Run these SQL files in this exact order in Supabase SQL Editor:
 3. `migrations/003_circulation_integrity_and_security.sql`
 4. `migrations/004_enterprise_library_operations.sql`
 5. `migrations/005_patron_portal_and_role_security.sql`
+6. `migrations/006_campus_library_services.sql`
 
 What they do:
 
@@ -130,6 +146,7 @@ What they do:
 - **003**: database-level checkout validation, safe borrow-counter synchronization, fine/payment synchronization and initial RLS.
 - **004**: physical-copy/accession tracking, vendors/acquisitions, receiving, lost/damaged incidents, notification templates, patron-account mapping, reading lists and staff bootstrap helpers.
 - **005**: role-aware core RLS and student self-service functions/views.
+- **006**: multi-branch services, copy transfers, study spaces/bookings, student acquisition suggestions and digital resources.
 
 Test migrations on a staging Supabase project before applying them to production.
 
@@ -174,20 +191,23 @@ GitHub Actions also runs `npm ci`, TypeScript checking and the production build 
 
 New loans are rejected at the database layer when a student is inactive, has reached the borrowing limit, the title is archived/reference-only, or there are no available copies. Borrow counters are recalculated from actual active loans rather than blindly incremented/decremented.
 
-Role-aware RLS separates staff and patrons. Students can browse the catalog and access their own member/loan/reservation/fine/notice data, but operational writes remain staff-controlled. Student reservations and notice read-state changes use restricted RPCs rather than broad table-write permission.
+Role-aware RLS separates staff and patrons. Students can browse the catalog and access their own member/loan/reservation/fine/notice/space-booking/acquisition-request data, but operational writes remain staff-controlled. Student mutations use restricted RPCs rather than broad table-write permission.
+
+Study-space booking validates future time, capacity, overlap and maximum booking duration in PostgreSQL, not only in the UI.
 
 The first-admin bootstrap only works while no staff profile exists. After that, staff changes require authorized staff RPCs.
 
 ## Main staff screens
 
 - Dashboard
-- Inventory / catalog
+- Inventory / Catalog
 - Copies & Stocktake
 - Borrowing
 - Students
 - Circulation Center
 - Fines & Payments
 - Acquisitions & Vendors
+- Campus & Branch Services
 - Notification Center
 - Reports & Analytics
 - Staff & Roles
@@ -198,6 +218,10 @@ The first-admin bootstrap only works while no staff profile exists. After that, 
 - Catalog
 - My Loans
 - Reservations
+- Services
+  - Study-space booking
+  - Digital resources
+  - Acquisition suggestions
 - Fines
 - Notices
 - Account
