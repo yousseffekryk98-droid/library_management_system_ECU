@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, BookHeart, BookOpen, CalendarClock, CircleDollarSign, Globe, Library, LogOut, Search, UserRound } from 'lucide-react';
+import { Bell, BookHeart, BookOpen, CalendarClock, CircleDollarSign, DoorOpen, ExternalLink, FilePlus2, Globe, Library, Link2, LogOut, Search, UserRound } from 'lucide-react';
 import { Language } from '../translations';
 import { supabase } from '../services/supabase-client';
 
@@ -9,8 +9,12 @@ type Reservation = { id: number; book_id: number; status: string; queue_position
 type Fine = { id: number; type: string; amount: number; paid_amount: number; status: string; reason?: string; due_date?: string };
 type Notice = { id: number; title: string; body: string; status: string; channel: string; created_at: string };
 type Summary = { student_id: string; student_name: string; email?: string; faculty_name?: string; department?: string; academic_year?: string; status: string; borrow_limit: number; active_loans: number; active_reservations: number; outstanding_fines: number };
+type Space = { id: number; name: string; space_type: string; capacity: number; floor?: string; zone?: string; requires_approval: boolean; library_branches?: { name?: string } };
+type SpaceBooking = { id: number; space_id: number; start_at: string; end_at: string; status: string; purpose?: string; attendee_count: number; study_spaces?: { name?: string } };
+type DigitalResource = { id: number; title: string; author?: string; resource_type: string; description?: string; url: string; provider?: string; subject?: string; access_level: string };
+type AcquisitionRequest = { id: number; title: string; author?: string; resource_type: string; reason?: string; status: string; created_at: string };
 
-type PortalTab = 'catalog' | 'loans' | 'holds' | 'fines' | 'notices' | 'account';
+type PortalTab = 'catalog' | 'loans' | 'holds' | 'services' | 'fines' | 'notices' | 'account';
 
 export default function PatronPortal({ lang, setLang, signOut }: { lang: Language; setLang: (l: Language) => void; signOut: () => Promise<void> }) {
   const ar = lang === 'ar';
@@ -21,17 +25,27 @@ export default function PatronPortal({ lang, setLang, signOut }: { lang: Languag
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [fines, setFines] = useState<Fine[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [spaceBookings, setSpaceBookings] = useState<SpaceBooking[]>([]);
+  const [resources, setResources] = useState<DigitalResource[]>([]);
+  const [acquisitionRequests, setAcquisitionRequests] = useState<AcquisitionRequest[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [spaceForm, setSpaceForm] = useState({ space_id: '', start_at: '', end_at: '', attendee_count: '1', purpose: '' });
+  const [requestForm, setRequestForm] = useState({ title: '', author: '', isbn: '', resource_type: 'book', reason: '' });
 
   const load = async () => {
-    const [{ data: s }, { data: c }, { data: l }, { data: r }, { data: f }, { data: n }] = await Promise.all([
+    const [{ data: s }, { data: c }, { data: l }, { data: r }, { data: f }, { data: n }, { data: sp }, { data: sb }, { data: dr }, { data: aq }] = await Promise.all([
       supabase.from('patron_my_account_summary').select('*').maybeSingle(),
       supabase.from('patron_catalog').select('*').order('title').limit(1200),
       supabase.from('borrowing').select('*').order('borrow_date', { ascending: false }).limit(200),
       supabase.from('reservations').select('*, books(title,author)').order('reserved_at', { ascending: false }).limit(100),
       supabase.from('fines').select('*').order('created_at', { ascending: false }).limit(100),
-      supabase.from('library_notices').select('*').order('created_at', { ascending: false }).limit(100)
+      supabase.from('library_notices').select('*').order('created_at', { ascending: false }).limit(100),
+      supabase.from('study_spaces').select('*, library_branches(name)').eq('is_active', true).order('name'),
+      supabase.from('space_bookings').select('*, study_spaces(name)').order('start_at', { ascending: false }).limit(100),
+      supabase.from('digital_resources').select('*').eq('is_active', true).order('title').limit(500),
+      supabase.from('acquisition_requests').select('*').order('created_at', { ascending: false }).limit(100)
     ]);
     setSummary((s as Summary | null) || null);
     setCatalog((c || []) as CatalogBook[]);
@@ -39,6 +53,10 @@ export default function PatronPortal({ lang, setLang, signOut }: { lang: Languag
     setReservations((r || []) as Reservation[]);
     setFines((f || []) as Fine[]);
     setNotices((n || []) as Notice[]);
+    setSpaces((sp || []) as Space[]);
+    setSpaceBookings((sb || []) as SpaceBooking[]);
+    setResources((dr || []) as DigitalResource[]);
+    setAcquisitionRequests((aq || []) as AcquisitionRequest[]);
   };
 
   useEffect(() => { load(); }, []);
@@ -62,6 +80,40 @@ export default function PatronPortal({ lang, setLang, signOut }: { lang: Languag
     load();
   };
 
+  const bookSpace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.rpc('book_my_study_space', {
+      space_id_in: Number(spaceForm.space_id),
+      start_at_in: new Date(spaceForm.start_at).toISOString(),
+      end_at_in: new Date(spaceForm.end_at).toISOString(),
+      attendee_count_in: Number(spaceForm.attendee_count || 1),
+      purpose_in: spaceForm.purpose || null
+    });
+    if (error) return alert(error.message);
+    setSpaceForm({ space_id: '', start_at: '', end_at: '', attendee_count: '1', purpose: '' });
+    load();
+  };
+
+  const cancelSpace = async (id: number) => {
+    const { error } = await supabase.rpc('cancel_my_space_booking', { booking_id_in: id });
+    if (error) return alert(error.message);
+    load();
+  };
+
+  const submitAcquisitionRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { error } = await supabase.rpc('submit_my_acquisition_request', {
+      title_in: requestForm.title,
+      author_in: requestForm.author || null,
+      isbn_in: requestForm.isbn || null,
+      resource_type_in: requestForm.resource_type,
+      reason_in: requestForm.reason || null
+    });
+    if (error) return alert(error.message);
+    setRequestForm({ title: '', author: '', isbn: '', resource_type: 'book', reason: '' });
+    load();
+  };
+
   const categories = Array.from(new Set(catalog.map(b => b.category).filter(Boolean) as string[])).sort();
   const filteredBooks = catalog.filter(book => {
     const q = search.toLowerCase();
@@ -75,6 +127,7 @@ export default function PatronPortal({ lang, setLang, signOut }: { lang: Languag
     { id: 'catalog' as const, label: ar ? 'الفهرس' : 'Catalog', icon: Library },
     { id: 'loans' as const, label: ar ? 'استعاراتي' : 'My loans', icon: BookOpen },
     { id: 'holds' as const, label: ar ? 'حجوزاتي' : 'Reservations', icon: CalendarClock },
+    { id: 'services' as const, label: ar ? 'الخدمات' : 'Services', icon: DoorOpen },
     { id: 'fines' as const, label: ar ? 'الغرامات' : 'Fines', icon: CircleDollarSign },
     { id: 'notices' as const, label: ar ? 'الإشعارات' : 'Notices', icon: Bell },
     { id: 'account' as const, label: ar ? 'حسابي' : 'Account', icon: UserRound },
@@ -93,6 +146,18 @@ export default function PatronPortal({ lang, setLang, signOut }: { lang: Languag
       {tab === 'loans' && <div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 p-5"><h2 className="font-black">{ar ? 'سجل الاستعارات' : 'Loan history'}</h2></div><div className="divide-y divide-slate-100">{loans.map(loan => <div key={loan.id} className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{loan.book_title || `Book #${loan.book_id}`}</p><p className="text-xs text-slate-500">{loan.borrow_date ? new Date(loan.borrow_date).toLocaleDateString() : '—'} → {loan.expected_return_date ? new Date(loan.expected_return_date).toLocaleDateString() : '—'}</p></div><span className={`w-fit rounded-full px-2 py-1 text-[10px] font-black uppercase ${loan.return_date ? 'bg-slate-100 text-slate-600' : overdueIds.has(loan.id) ? 'bg-rose-50 text-rose-700' : 'bg-blue-50 text-blue-700'}`}>{loan.return_date ? (ar ? 'تم الإرجاع' : 'Returned') : overdueIds.has(loan.id) ? (ar ? 'متأخر' : 'Overdue') : (ar ? 'نشط' : 'Active')}</span></div>)}</div></div>}
 
       {tab === 'holds' && <div className="grid gap-4 md:grid-cols-2">{reservations.map(r => <div key={r.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-black">{r.books?.title || `Book #${r.book_id}`}</p><p className="text-xs text-slate-500">{r.books?.author || '—'}</p></div><span className="rounded-full bg-violet-50 px-2 py-1 text-[10px] font-black uppercase text-violet-700">{r.status}</span></div><p className="mt-3 text-xs text-slate-500">{ar ? 'ترتيب الانتظار' : 'Queue position'}: {r.queue_position || '—'}</p>{['waiting','ready'].includes(r.status) && <button onClick={() => cancelHold(r.id)} className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">{ar ? 'إلغاء الحجز' : 'Cancel reservation'}</button>}</div>)}</div>}
+
+      {tab === 'services' && <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <form onSubmit={bookSpace} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center gap-2"><DoorOpen className="h-5 w-5 text-blue-600"/><h2 className="font-black">{ar ? 'حجز مساحة دراسة' : 'Book a study space'}</h2></div><div className="space-y-3"><select required className="input" value={spaceForm.space_id} onChange={e => setSpaceForm({ ...spaceForm, space_id: e.target.value })}><option value="">{ar ? 'اختر المساحة' : 'Choose a space'}</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name} · {s.space_type} · {s.capacity} {ar ? 'أشخاص' : 'people'} · {s.library_branches?.name || ''}</option>)}</select><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-500">{ar ? 'البداية' : 'Start'}<input required type="datetime-local" className="input mt-1" value={spaceForm.start_at} onChange={e => setSpaceForm({ ...spaceForm, start_at: e.target.value })}/></label><label className="text-xs font-bold text-slate-500">{ar ? 'النهاية' : 'End'}<input required type="datetime-local" className="input mt-1" value={spaceForm.end_at} onChange={e => setSpaceForm({ ...spaceForm, end_at: e.target.value })}/></label></div><input type="number" min="1" className="input" placeholder={ar ? 'عدد الحضور' : 'Attendees'} value={spaceForm.attendee_count} onChange={e => setSpaceForm({ ...spaceForm, attendee_count: e.target.value })}/><input className="input" placeholder={ar ? 'الغرض من الحجز' : 'Purpose'} value={spaceForm.purpose} onChange={e => setSpaceForm({ ...spaceForm, purpose: e.target.value })}/><button className="btn-primary w-full"><CalendarClock className="h-4 w-4"/>{ar ? 'تأكيد الحجز' : 'Book space'}</button></div></form>
+
+          <form onSubmit={submitAcquisitionRequest} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="mb-4 flex items-center gap-2"><FilePlus2 className="h-5 w-5 text-violet-600"/><h2 className="font-black">{ar ? 'اقترح كتاباً أو مورداً' : 'Suggest a book or resource'}</h2></div><div className="space-y-3"><input required className="input" placeholder={ar ? 'العنوان' : 'Title'} value={requestForm.title} onChange={e => setRequestForm({ ...requestForm, title: e.target.value })}/><input className="input" placeholder={ar ? 'المؤلف' : 'Author'} value={requestForm.author} onChange={e => setRequestForm({ ...requestForm, author: e.target.value })}/><input className="input" placeholder="ISBN" value={requestForm.isbn} onChange={e => setRequestForm({ ...requestForm, isbn: e.target.value })}/><select className="input" value={requestForm.resource_type} onChange={e => setRequestForm({ ...requestForm, resource_type: e.target.value })}>{['book','ebook','journal','database','thesis','other'].map(x => <option key={x}>{x}</option>)}</select><textarea className="input min-h-20" placeholder={ar ? 'لماذا تحتاج هذا المورد؟' : 'Why should the library acquire it?'} value={requestForm.reason} onChange={e => setRequestForm({ ...requestForm, reason: e.target.value })}/><button className="btn-secondary w-full"><FilePlus2 className="h-4 w-4"/>{ar ? 'إرسال الاقتراح' : 'Submit suggestion'}</button></div></form>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2"><div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-4 font-black">{ar ? 'حجوزات المساحات' : 'My space bookings'}</h2><div className="space-y-3">{spaceBookings.map(b => <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-3"><div><p className="font-bold">{b.study_spaces?.name || `Space #${b.space_id}`}</p><p className="text-xs text-slate-500">{new Date(b.start_at).toLocaleString()} → {new Date(b.end_at).toLocaleString()} · {b.status}</p></div>{['booked','approved'].includes(b.status) && <button onClick={() => cancelSpace(b.id)} className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-black text-rose-700">{ar ? 'إلغاء' : 'Cancel'}</button>}</div>)}{!spaceBookings.length && <p className="text-sm text-slate-400">{ar ? 'لا توجد حجوزات.' : 'No bookings.'}</p>}</div></div><div className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="mb-4 font-black">{ar ? 'اقتراحاتي' : 'My acquisition suggestions'}</h2><div className="space-y-3">{acquisitionRequests.map(req => <div key={req.id} className="rounded-xl border border-slate-100 p-3"><div className="flex items-center justify-between gap-3"><p className="font-bold">{req.title}</p><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{req.status}</span></div><p className="mt-1 text-xs text-slate-500">{req.author || '—'} · {req.resource_type}</p></div>)}{!acquisitionRequests.length && <p className="text-sm text-slate-400">{ar ? 'لم ترسل اقتراحات بعد.' : 'No suggestions yet.'}</p>}</div></div></div>
+
+        <div><div className="mb-3 flex items-center gap-2"><Link2 className="h-5 w-5 text-blue-600"/><h2 className="font-black">{ar ? 'الموارد الرقمية' : 'Digital resources'}</h2></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{resources.map(resource => <article key={resource.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{resource.title}</h3><p className="mt-1 text-xs text-slate-500">{resource.author || resource.provider || '—'} · {resource.resource_type}</p></div><span className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-black uppercase text-blue-700">{resource.access_level}</span></div>{resource.description && <p className="mt-3 line-clamp-3 text-xs text-slate-600">{resource.description}</p>}<a href={resource.url} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-xs font-black text-blue-600"><ExternalLink className="h-4 w-4"/>{ar ? 'فتح المورد' : 'Open resource'}</a></article>)}</div></div>
+      </div>}
 
       {tab === 'fines' && <div className="rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="divide-y divide-slate-100">{fines.map(f => <div key={f.id} className="flex items-center justify-between gap-4 p-5"><div><p className="font-bold capitalize">{f.type}</p><p className="text-xs text-slate-500">{f.reason || '—'} {f.due_date ? `· ${f.due_date}` : ''}</p></div><div className="text-end"><p className="font-black">{Number(f.amount - f.paid_amount).toLocaleString()} EGP</p><p className="text-[10px] font-bold uppercase text-slate-500">{f.status}</p></div></div>)}{!fines.length && <p className="p-10 text-center text-sm text-slate-400">{ar ? 'لا توجد غرامات.' : 'No fines.'}</p>}</div></div>}
 
