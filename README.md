@@ -132,9 +132,11 @@ PORT=3000
 
 Never put a Supabase service-role key in a `VITE_` variable or commit it to GitHub.
 
-### 3. Apply database migrations
+### 3. Apply database migrations to a brand-new empty Supabase database
 
-Run these SQL files in this exact order in Supabase SQL Editor:
+The repository now includes the **complete SQL schema from zero**. Do not manually create any application table before running the migrations.
+
+Run these files in this exact order in Supabase SQL Editor:
 
 1. `migrations/001_create_schema_and_functions.sql`
 2. `migrations/002_library_pro_v4.sql`
@@ -143,18 +145,26 @@ Run these SQL files in this exact order in Supabase SQL Editor:
 5. `migrations/005_patron_portal_and_role_security.sql`
 6. `migrations/006_campus_library_services.sql`
 7. `migrations/007_copy_level_circulation.sql`
+8. `migrations/008_verify_complete_fresh_install.sql`
 
 What they do:
 
-- **001**: original catalog, students, borrowing and settings foundation.
+- **001**: complete empty-database foundation — migration ledger, books, students, borrowing, settings, indexes, timestamps, defaults and compatibility RPCs.
 - **002**: reservations, fines/payments, notices, stocktake tables, audit log, staff profiles, richer catalog/member fields and reporting views.
 - **003**: database-level checkout validation, safe borrow-counter synchronization, fine/payment synchronization and initial RLS.
 - **004**: physical-copy/accession tracking, vendors/acquisitions, receiving, lost/damaged incidents, notification templates, patron-account mapping, reading lists and staff bootstrap helpers.
 - **005**: role-aware core RLS and student self-service functions/views.
 - **006**: multi-branch services, copy transfers, study spaces/bookings, student acquisition suggestions and digital resources.
 - **007**: atomic physical-copy checkout/return RPCs, scanner lookup, one-active-loan-per-copy enforcement and copy-status synchronization.
+- **008**: verifies the full fresh install and fails if a required table, view, RPC, index, RLS flag or baseline setting is missing.
 
-Test migrations on a staging Supabase project before applying them to production.
+If `008` completes successfully, the schema expected by the application is present. It also records the completed chain in `public.library_schema_migrations`.
+
+See `migrations/README.md` for the database runbook.
+
+GitHub Actions additionally runs every SQL migration against a clean PostgreSQL 16 database with minimal Supabase Auth compatibility stubs, so migration syntax and dependency ordering are checked before merge.
+
+Test the complete chain on a staging Supabase project before applying it to production.
 
 ### 4. Create the first administrator
 
@@ -201,7 +211,10 @@ npm run start
 
 `npm run check` runs TypeScript checking and a Vite production build.
 
-GitHub Actions also runs `npm ci`, TypeScript checking and the production build on pushes and pull requests.
+GitHub Actions runs two independent checks:
+
+- `check`: `npm ci`, TypeScript checking and the production Vite build.
+- `migration-smoke`: starts an empty PostgreSQL database and executes every migration SQL file in numeric order.
 
 ## Database safeguards
 
